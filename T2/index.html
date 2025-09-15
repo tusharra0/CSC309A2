@@ -51,15 +51,22 @@
             <section>
                 <h2>Contact Me</h2>
                 <form action="/submit" method="post">
-                    <label>Name:</label>
-                    <input type="text" id="name">
-                    <label>Email:</label>
-                    <input type="email" id="email">
-                    <label>Message:</label>
-                    <textarea id="message"></textarea>
+          <div>
+            <label for="name">Name:</label>
+            <input type="text" id="name" name="name" required />
+          </div>
 
-                    <button type="submit">Submit</button>
-                </form>    
+          <div>
+            <label for="email">Email:</label>
+            <input type="email" id="email" name="email" required />
+          </div>
+
+          <div>
+            <label for="message">Message:</label>
+            <textarea id="message" name="message" rows="4" required></textarea>
+          </div>
+          <button type="submit">Submit</button>
+        </form>    
             </section>
         </main>
         <footer>
