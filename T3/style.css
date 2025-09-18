@@ -1,6 +1,6 @@
  .current{
     text-decoration: underline;
-    text-decoration-color: e8797f;
+    text-decoration-color: #e8797f;
     text-decoration-thickness: 2px;
  }
 
@@ -28,19 +28,21 @@
     flex-direction: column;
     align-items: center;
  }
-
+#hero{
+    display: flex;
+}
  #section_title{
     font-size: 30px;
  }
 
- #course-section{
+ #courses-section{
     display: flex;
     align-items: center;
     
 
  }
 
- #course-section li{
+ #courses-section li{
     list-style: disc;
     font-size: 15px;
  }
