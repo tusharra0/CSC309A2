@@ -30,6 +30,8 @@
  }
 #hero{
     display: flex;
+    gap: 100px;
+    
 }
  #section_title{
     font-size: 30px;
@@ -38,7 +40,7 @@
  #courses-section{
     display: flex;
     align-items: center;
-    
+    flex-direction: column;
 
  }
 
