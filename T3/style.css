@@ -1,19 +1,25 @@
  .current{
-    border-bottom: 2px solid #e8797f;
+    text-decoration: underline;
+    text-decoration-color: e8797f;
+    text-decoration-thickness: 2px;
  }
 
  .navbar ul{
     display: flex;
     list-style: none;
+    margin: 0;
+    padding: 0;
  }
 
  .navbar li{
     margin: 0;
+    list-style: none;
  }
 
  .hero-container{
     display: flex;
     gap: 100px;
+    flex-direction: column;
  }
 
  #hero-section{
@@ -28,12 +34,13 @@
  #course-section{
     display: flex;
     align-items: center;
-    font-size: 15px;
+    
 
  }
 
  #course-section li{
     list-style: disc;
+    font-size: 15px;
  }
 
  form{
