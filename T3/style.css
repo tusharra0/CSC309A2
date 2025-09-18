@@ -1,0 +1,57 @@
+ .current{
+    border-bottom: 2px solid #e8797f;
+ }
+
+ .navbar ul{
+    display: flex;
+    list-style: none;
+ }
+
+ .navbar li{
+    margin: 0;
+ }
+
+ .hero-container{
+    display: flex;
+    gap: 100px;
+ }
+
+ #hero-section{
+    display: flex;
+    flex-direction: column;
+ }
+
+ #section_title{
+    font-size: 30px;
+ }
+
+ #course-section{
+    display: flex;
+    align-items: center;
+    font-size: 15px;
+
+ }
+
+ #course-section li{
+    list-style: disc;
+ }
+
+ form{
+    display: flex;
+    flex-direction: column;
+ }
+
+ input[type="submit"]{
+    background-color: #636161;
+    width: 100px;
+    height: 30px;
+    border: none;
+    color: white;
+    cursor: pointer;
+ }
+
+ .contact-container{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+ }
