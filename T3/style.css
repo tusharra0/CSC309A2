@@ -20,11 +20,13 @@
     display: flex;
     gap: 100px;
     flex-direction: column;
+    align-items: center;
  }
 
  #hero-section{
     display: flex;
     flex-direction: column;
+    align-items: center;
  }
 
  #section_title{
