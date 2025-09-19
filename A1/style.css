@@ -30,7 +30,7 @@
     font-weight: 400;
     line-height: 1;
     text-decoration: none;
-    color: #00b8d4
+    color: #00B8D4
  }
 
  header nav a.active{
@@ -99,7 +99,7 @@ figure img {
 .profile img {
     width: 200px;
     height: 200px;
-    border-radius: 50%;      
+    border-radius: 100px;      
     overflow: hidden;        
     margin: 2rem auto 1rem;  
 }
@@ -123,7 +123,7 @@ figure img {
 }
 
 .intro-sub{
-  font-family: Inter, sans-serif; 
+  font-family: inter, sans-serif; 
   font-size: 24px;       
   font-weight: 400;        
   line-height: 1;          
@@ -136,12 +136,14 @@ about-button{
   display: inline-block;
   font-size: 1rem;        
   font-weight: 700;
-  color: #007EA8;
+  color: rgb(0, 126, 168);
   background: white;
   border: 2px solid #007EA8;
   border-radius: 4px;
   padding: 8px 16px;
-  text-decoration: none;    
+  text-decoration: none;
+  width: 126px;  
+  height: 38px;  
 }
 about-button :hover{
   background: #007EA8;       
