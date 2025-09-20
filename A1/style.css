@@ -191,12 +191,12 @@ figure img {
 details > summary {
   font-size: 20px;
   margin: 0 0.5 16px;
-  padding-bottom: 16px;
+  padding-bottom: 0px;
 }
 
 details > ul {
   margin-top: 0px;
-  margin-bottom: 24px;
+  margin-bottom: 0px;
 }
 
 .contact-head{
@@ -213,6 +213,8 @@ a.email {
   font-weight: 700;
   font-size: 32px;
   padding-bottom: 24px;
+
+  text-align: right;
 }
 
 .sixteen {
@@ -233,6 +235,8 @@ li {
   
   padding-right: 8px;
   vertical-align: top;
+  text-align: right;
+  padding-bottom: 16px;
 
 }
 
@@ -241,8 +245,7 @@ li {
   border-radius: 3px;
   border-width: 1px;
   border-style: solid;
-  padding-bottom: 8px;
-  padding-top: 8px;
+  padding: 0.8rem;
   
   width: 609px;
 }
@@ -250,6 +253,7 @@ li {
 .pdf-link {
   width: 720px;
   height: 648px;
+  padding-top: 22px;
 
 }
 
@@ -274,18 +278,8 @@ form {
   padding-top: 24px;
 }
 
-@media (max-width: 600px) {
-  main {
-    padding: 128px 0;
-    align-items: center;
-    text-align: center;
-    gap: 0;
-  }
-
-  .conform{
-    width: 100%;
-    max-width: 100%;
-    margin: 0 auto;
-  }
-  
+#agree{
+  transform: scale(150%);
 }
+
+
