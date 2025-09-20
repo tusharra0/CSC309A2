@@ -196,7 +196,7 @@ details > summary {
 
 details > ul {
   margin-top: 0px;
-  margin-bottom: 0px;
+  margin-bottom: 16px;
 }
 
 .contact-head{
@@ -213,7 +213,7 @@ a.email {
   font-weight: 700;
   font-size: 32px;
   padding-bottom: 24px;
-
+  align-content: center;
   text-align: right;
 }
 
