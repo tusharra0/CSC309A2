@@ -191,6 +191,7 @@ figure img {
 details > summary {
   font-size: 20px;
   margin: 0 0.5 16px;
+  padding-bottom: 16px;
 }
 
 details > ul {
@@ -202,7 +203,7 @@ details > ul {
   font-size: 48px;
   text-align: center;
   margin-top: 0;
-  margin-bottom: 0;
+  margin-bottom: 16px;
   padding-bottom: 0;
   padding-top: 0;
 }
@@ -228,11 +229,17 @@ li {
 .info{
   font-weight: 700;
   text-align: right;
+  
+
+}
+
+.info-inp{
   border-color: #BBBBBB;
   border-radius: 3px;
   border-width: 1px;
   border-style: solid;
   padding-bottom: 8px;
+  padding-top: 22px;
 }
 
 .pdf-link {
@@ -248,3 +255,6 @@ li {
   padding: 8px 16px 8px;
 }
 
+form {
+  padding-top: 24px;
+}
