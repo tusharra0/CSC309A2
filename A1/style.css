@@ -178,6 +178,11 @@ figure img {
 
 .about-heading{
   font-size: 48px;
-  
+  margin-top: 0;
+  text-align: center;
+  margin-bottom: 0px;
 }
 
+.course-list{
+  font-size: 20px;
+}
