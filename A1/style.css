@@ -228,9 +228,11 @@ li {
 
 .info{
   font-weight: 700;
-  text-align: right;
+  text-align: left;
+  display: inline-block;
   
-  justify-content: left;
+  padding-right: 8px;
+  vertical-align: top;
 
 }
 
@@ -241,7 +243,7 @@ li {
   border-style: solid;
   padding-bottom: 8px;
   padding-top: 8px;
-  justify-content: right;
+  
   width: 609px;
 }
 
@@ -272,3 +274,18 @@ form {
   padding-top: 24px;
 }
 
+@media (max-width: 600px) {
+  main {
+    padding: 128px 0;
+    align-items: center;
+    text-align: center;
+    gap: 0;
+  }
+
+  .conform{
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+  }
+  
+}
