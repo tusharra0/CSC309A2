@@ -19,7 +19,7 @@
     padding: 0 0.5rem;
     display: flex;
     align-items: center;
-    background-color: #083b40;
+    background-color: #333333;
  }
 
  header nav {
@@ -72,11 +72,12 @@ main {
 main > * {
      max-width: 52rem; 
 }
-main h1 { 
+main h1.intro { 
     font-size: 3rem; 
     font-weight:700; 
     text-align:center;
-    margin: 0 0 16px;
+    margin-top: 0;
+    margin-bottom: 16px;
 }
 
 main p, details summary { 
@@ -84,6 +85,7 @@ main p, details summary {
   color: #94a3b8;                
   text-align: center;
   margin: 0 0.5rem;
+  margin-top: 0;
 }
 
 details summary { 
