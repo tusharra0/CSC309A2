@@ -29,18 +29,16 @@
       <p>
   <a class="email" href="mailto:notadome@mail.utoronto.ca?subject=Bug%20Found&body=I%20found%20the%20following%20bug%20on%20your%20website:%0A%0A">notadome@mail.utoronto.ca</a>
 </p>
-      <form action="https://httpbin.org/post" enctype="multipart/form-data" method="post" novalidate>
+      <form action="https" enctype="multipart/form-data" method="post" novalidate>
         <label class="info" for="email">Your Email:</label>
         <input class="info-inp" id="email" name="email" width="609" type="email" required>
         <label class="info" for="feedback">Feedback:</label>
-        <textarea class="info-inp" id="feedback" name="feedback" rows="4" placeholder="Enter your feedback here"></textarea>
+        <textarea class="info-inp" id="feedback" name="feedback" rows="4" placeholder="Enter your feedback here" required></textarea>
         <label class="info" for="attatchment">Attachment:</label>
-        <input id="attatchment" name="attachments" type="file" accept=".png,.jpg,.jpeg,.pdf">
+        <input class="info-inp" id="attatchment" name="attachments" type="file" accept=".png,.jpg,.jpeg,.pdf" required>
 
-        <label>
-          <input id="agree" name="consent" type="checkbox">
-          You agree to receive emails from me
-        </label>
+        <label>You agree to receive emails from me </label>
+        <input id="agree" name="consent" type="checkbox">
         <button class="feedback-but" type="submit">Send Feedback</button>
       </form>
     </main>
