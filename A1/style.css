@@ -228,4 +228,23 @@ li {
 .info{
   font-weight: 700;
   text-align: right;
+  border-color: #BBBBBB;
+  border-radius: 3px;
+  border-width: 1px;
+  border-style: solid;
+  padding-bottom: 8px;
 }
+
+.pdf-link {
+  width: 720px;
+  height: 648px;
+
+}
+
+.feedback-but{
+  border-color: #007EA8;
+  border-width: 2px;
+  border-radius: 4px;
+  padding: 8px 16px 8px;
+}
+
