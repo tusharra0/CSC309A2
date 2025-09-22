@@ -419,7 +419,7 @@ form {
 
 
    #feedbacklabel{
-    transform: translateY(-15.4);
+    transform: translateY(15.4);
   }
 
 }
