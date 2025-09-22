@@ -299,9 +299,19 @@ form {
 }
 
 .conform #agree + label {
-  margin-left: 161px;
+  margin-left: 0px;
 }
 
+#agree + label {
+    margin-left: 18px;   /* give the label exactly 18px gap from checkbox */
+    display: inline-block;
+    margin-top: 32px;    /* keep the required vertical spacing */
+    width: auto;         /* don't force full input width */
+  }
+
+  label.info[for="feedback"] {
+  margin-top: 32px;
+}
 .conform > label:not(.info){
     display: inline-block;
     text-align: left;
@@ -336,11 +346,6 @@ form {
   .conform .info-inp + .info{
     margin-top: 16px;
   }
-
-  #email + .info {
-  margin-top: 32px;  
-}
-
 
 @media (max-width: 480px){
   .conform{
