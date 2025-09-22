@@ -277,6 +277,9 @@ li {
   font-weight: 700;
   background-color: white;
   color: #007EA8;
+  display: block;
+  margin-left: 166px;
+  margin-top: 32px;
 }
 
 .feedback-but:hover{
@@ -291,14 +294,19 @@ form {
 
 #agree{
   transform: scale(150%);
+  margin-left: 166px; 
+  vertical-align: middle;
 }
 
+.conform #agree + label {
+  margin-left: 18px;
+}
 
 .conform > label:not(.info){
     display: block;
     text-align: left;
     margin-top: 32px;
-    margin-left: 0px;
+    margin-left: 166px;
     width: 609px;
     box-sizing: border-box;
   }
@@ -315,14 +323,14 @@ form {
 
    .conform .info-inp{
     display: inline-block;
-    margin-left: 16px;
+    margin-left: 11px;
     width: 609px;
     box-sizing: border-box;
     vertical-align: middle;
   }
 
    .conform .info + .info-inp {
-    margin-top: 8px;
+    margin-top: 16px;
   }
 
   .conform .info-inp + .info{
