@@ -299,7 +299,7 @@ form {
 }
 
 .conform #agree + label {
-  margin-left: 0px;
+  margin-left: 161px;
 }
 
 .conform > label:not(.info){
@@ -336,6 +336,11 @@ form {
   .conform .info-inp + .info{
     margin-top: 16px;
   }
+
+  #email + .info {
+  margin-top: 32px;  
+}
+
 
 @media (max-width: 480px){
   .conform{
