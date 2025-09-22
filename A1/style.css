@@ -100,7 +100,7 @@ details summary::marker {
     content:""; 
 }
 details[open] { 
-  margin-bottom: 0.5rem;
+  margin-bottom: 0;
 }
 figure { 
     margin: 0.75rem auto 0; width: 520px; 
@@ -302,16 +302,6 @@ form {
   margin-left: 0px;
 }
 
-#agree + label {
-    margin-left: 18px;   /* give the label exactly 18px gap from checkbox */
-    display: inline-block;
-    margin-top: 32px;    /* keep the required vertical spacing */
-    width: auto;         /* don't force full input width */
-  }
-
-  label.info[for="feedback"] {
-  margin-top: 32px;
-}
 .conform > label:not(.info){
     display: inline-block;
     text-align: left;
