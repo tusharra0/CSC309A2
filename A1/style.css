@@ -192,7 +192,7 @@ figure img {
 details > summary {
   font-size: 20px;
   margin: 0 0.5rem 0px;
-  padding-bottom: 16px;
+  padding-bottom: 0px;
  
 }
 
@@ -337,6 +337,14 @@ form {
     margin-top: 16px;
   }
 
+  #youremail{
+    padding-bottom: 0;
+    margin-bottom: 0;
+  }
+
+  .agreelabel{
+    padding-left: 14px;
+  }
 @media (max-width: 480px){
   .conform{
     display: flex;
