@@ -35,7 +35,7 @@
     font-weight: 400;
     line-height: 1;
     text-decoration: none;
-    color: #00B8D4
+    color: #00B8D4;
  }
 
  header nav a.active{
@@ -185,18 +185,22 @@ figure img {
 
 .course-list{
   font-size: 20px;
-  padding-bottom: 16px;
+  margin-bottom: 16px;
+  
 }
 
 details > summary {
   font-size: 20px;
-  margin: 0 0.5 16px;
+  margin: 0 0.5rem 16px;
   padding-bottom: 0px;
+ 
 }
 
 details > ul {
   margin-top: 0px;
   margin-bottom: 16px;
+
+  
 }
 
 .contact-head{
@@ -215,6 +219,7 @@ a.email {
   padding-bottom: 24px;
   align-content: center;
   text-align: right;
+  
 }
 
 .sixteen {
@@ -257,6 +262,12 @@ li {
 
 }
 
+@media (max-width: 724px) {
+  .pdf-link{
+    width: 450px;
+  }
+}
+
 .feedback-but{
   border-color: #007EA8;
   border-width: 2px;
@@ -281,5 +292,4 @@ form {
 #agree{
   transform: scale(150%);
 }
-
 
