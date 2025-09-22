@@ -185,7 +185,7 @@ figure img {
 
 .course-list{
   font-size: 20px;
-  margin-bottom: 0px;
+  margin-bottom: 16px;
   
 }
 
@@ -198,7 +198,7 @@ details > summary {
 
 details > ul {
   margin-top: 0px;
-  margin-bottom: 0px;
+  margin-bottom: 16px;
 }
 
 details{
@@ -294,6 +294,16 @@ form {
   transform: scale(150%);
 }
 
+
+.conform > label:not(.info){
+    display: block;
+    text-align: left;
+    margin-top: 32px;
+    margin-left: 0px;
+    width: 609px;
+    box-sizing: border-box;
+  }
+
 @media (max-width: 480px){
   .conform{
     display: flex;
@@ -305,6 +315,7 @@ form {
   .conform .info-inp{
     width: 100%;
     box-sizing: border-box;
+    max-width: 100%;
   }
 
   .conform .info {
@@ -337,13 +348,14 @@ form {
     align-self: flex-start;
     margin-top: 16px;
   }
-  .info-inp{
-    width: 395.5px;
-  }
 
   .feedback-but{
     align-self: flex-start;
     margin-top: 32px;
+  }
+
+  main{
+    align-items: stretch;
   }
 
 }
