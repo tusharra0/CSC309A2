@@ -185,20 +185,20 @@ figure img {
 
 .course-list{
   font-size: 20px;
-  margin-bottom: 16px;
+  margin-bottom: 0px;
   
 }
 
 details > summary {
   font-size: 20px;
-  margin: 0 0.5rem 16px;
+  margin: 0 0.5rem 0px;
   padding-bottom: 0px;
  
 }
 
 details > ul {
   margin-top: 0px;
-  margin-bottom: 16px;
+  margin-bottom: 0px;
 }
 
 details{
@@ -298,10 +298,13 @@ form {
   .conform{
     display: flex;
     flex-direction: column;
-    align-items: stretch;
+    align-items: flex-start;
+    padding: 0;
+  }
+
+  .conform .info-inp{
     width: 100%;
     box-sizing: border-box;
-    padding: 0 16px;
   }
 
   .conform .info {
@@ -320,19 +323,27 @@ form {
   }
 
   #agree{
-    align-self: flex-start;
-    margin-top: 16px;
+    
+    margin: 16px 0 0 0;
     transform: none;
   }
 
   .conform > label:not(.info){
-    align-self: flex-start;
-    margin-top: 8px;
-    text-align: left;
+    display: block;
+    margin: 8px 0 0 0;
   }
 
   .feedback-but{
     align-self: flex-start;
     margin-top: 16px;
   }
+  .info-inp{
+    width: 395.5px;
+  }
+
+  .feedback-but{
+    align-self: flex-start;
+    margin-top: 32px;
+  }
+
 }
