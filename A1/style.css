@@ -278,7 +278,7 @@ li {
   background-color: white;
   color: #007EA8;
   display: block;
-  margin-left: 166px;
+  margin-left: 161px;
   margin-top: 32px;
 }
 
@@ -294,20 +294,20 @@ form {
 
 #agree{
   transform: scale(150%);
-  margin-left: 166px; 
+  margin-left: 143px; 
   vertical-align: middle;
 }
 
 .conform #agree + label {
-  margin-left: 18px;
+  margin-left: 0px;
 }
 
 .conform > label:not(.info){
-    display: block;
+    display: inline-block;
     text-align: left;
     margin-top: 32px;
-    margin-left: 166px;
-    width: 609px;
+    margin-left: 161px;
+    width: auto;
     box-sizing: border-box;
   }
 
@@ -376,11 +376,17 @@ form {
   .conform > label:not(.info){
     display: block;
     margin: 8px 0 0 0;
+    width: auto;
+  }
+
+    .conform #agree + label {
+    margin-left: 0;        
   }
 
   .feedback-but{
     align-self: flex-start;
-    margin-top: 16px;
+    margin-top: 32px;
+    margin-left: 0;
   }
 
   .feedback-but{
