@@ -419,9 +419,7 @@ form {
 
 
    #feedbacklabel{
-    margin-top: 15.6;
-    padding-top: 0;
-    transform: translateY(-0);
+    transform: translateY(-15.4);
   }
 
 }
