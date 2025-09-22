@@ -199,10 +199,11 @@ details > summary {
 details > ul {
   margin-top: 0px;
   margin-bottom: 16px;
-
-  
 }
 
+details{
+  margin-bottom: 0;
+}
 .contact-head{
   font-size: 48px;
   text-align: center;
@@ -293,3 +294,45 @@ form {
   transform: scale(150%);
 }
 
+@media (max-width: 480px){
+  .conform{
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0 16px;
+  }
+
+  .conform .info {
+    display: block;
+    text-align: left;
+    padding: 0;
+    margin: 0;
+  }
+
+  .conform .info + .info-inp {
+    margin-top: 8px;
+  }
+
+  .conform .info-inp + .info{
+    margin-top: 16px;
+  }
+
+  #agree{
+    align-self: flex-start;
+    margin-top: 16px;
+    transform: none;
+  }
+
+  .conform > label:not(.info){
+    align-self: flex-start;
+    margin-top: 8px;
+    text-align: left;
+  }
+
+  .feedback-but{
+    align-self: flex-start;
+    margin-top: 16px;
+  }
+}
