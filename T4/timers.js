@@ -6,8 +6,9 @@ function update_stats() {
     let num_active_timers = document.querySelector("#num_active_timers");
     /* TODO: Find the DOM nodes as JS objects (Elements)
     */
-    let num_expired_timers =
-    let avg_remain_time =
+    let num_expired_timers = document.querySelector("#num_expired_timers");
+    let avg_remain_time = document.querySelector("#avg_remain_time");
+
 
     /* TODO: Complete these stats calculations. 
     Hint: use Array.reduce on timers;
@@ -29,9 +30,40 @@ class Timer {
         /* TODO: Complete the constructor and start a periodic callback
          * using setInterval to update the timer value once every 1 second.
          * When the timer reaches 0, the countdown should stop. */
-    }
+        this.remaining = minutes * 60 + seconds;
+        this.update = update;
+        this.remove = remove;
+
+        
+        this.update(Math.floor(this.remaining / 60), this.remaining % 60);
+
+        this.interval = setInterval(() => {
+          if (this.remaining > 0) { this.remaining--; this.update(Math.floor(this.remaining / 60), this.remaining % 60);
+
+        }else { clearInterval(this.interval); }
+
+        update_stats();
+
+    }, 1000);
 
     /* TODO: Add other methods as you see fit */
+}
+
+extend(seconds) {
+        this.remaining += seconds;
+        if (!this.interval) {
+            this.interval = setInterval(() => {
+                if (this.remaining > 0) {
+                    this.remaining--;
+                    this.update(Math.floor(this.remaining / 60), this.remaining % 60);
+                } else {
+                    clearInterval(this.interval);
+                    this.interval = null;
+                }
+                update_stats();
+            }, 1000);
+        }
+    }
 }
 
 function create_timer(event, form)
@@ -103,13 +135,15 @@ function extend_all_timers(event, form) {
     }
 
     /* TODO: Extend all timers' values by `seconds`. Hint: use Array.forEach. */
-
+    timers.forEach(t => t.extend(seconds));
+    update_stats();
     return false;
 }
 
 function clear_expired_timers(event) {
     event.preventDefault();
-    
+    timers.filter(t => t.remaining <= 0).forEach(t => t.remove());
+    update_stats();
     /* TODO: Remove all expired timers from `timers` by calling the `remove` 
      * closure passed to their constructors. Hint: use Array.filter. */
 }
