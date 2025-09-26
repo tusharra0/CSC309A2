@@ -38,7 +38,7 @@ function update_stats() {
     if(stats.num_active_timers == 0){
         stats.avg_seconds = 0
     }else{
-        stats.avg_seconds = stats.avg_seconds/stats.num_active;
+        stats.avg_seconds = stats.avg_seconds/(stats.num_active + stats.num_expired);
     }
 
     num_active = stats.num_active;
@@ -173,7 +173,7 @@ function extend_all_timers(event, form) {
     /* TODO: Extend all timers' values by `seconds`. Hint: use Array.forEach. */
     timers.forEach(t => t.extend(seconds));
     update_stats();
-    return false;
+    return true;
 }
 
 function clear_expired_timers(event) {
