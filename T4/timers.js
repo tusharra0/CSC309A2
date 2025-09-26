@@ -13,9 +13,6 @@ function update_stats() {
     /* TODO: Complete these stats calculations. 
     Hint: use Array.reduce on timers;
     */
-    let num_expired = 0;
-    let num_active = 0;
-    let avg_seconds = 0;
 
     const stats = timers.reduce(
         (acc,t)=>{
@@ -36,6 +33,9 @@ function update_stats() {
         acc.avg_seconds = acc.avg_seconds/acc.num_active;
     }
 
+    num_active = stats.num_active;
+    num_expired = stats.num_expired;
+    avg_seconds = stats.avg_seconds;
     num_active_timers.innerHTML = num_active;
     num_expired_timers.innerHTML = num_expired;
     avg_remain_time.innerHTML = Math.ceil(avg_seconds);
