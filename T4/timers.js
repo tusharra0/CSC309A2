@@ -38,9 +38,13 @@ class Timer {
         this.update(Math.floor(this.remaining / 60), this.remaining % 60);
 
         this.interval = setInterval(() => {
-          if (this.remaining > 0) { this.remaining--; this.update(Math.floor(this.remaining / 60), this.remaining % 60);
+            if (this.remaining > 0) { 
+                this.remaining--; 
+                this.update(Math.floor(this.remaining / 60), this.remaining % 60);
 
-        }else { clearInterval(this.interval); }
+            }else { 
+                clearInterval(this.interval); 
+            }
 
         update_stats();
 
@@ -48,8 +52,9 @@ class Timer {
 
     /* TODO: Add other methods as you see fit */
 }
+}
 
-extend(seconds) {
+function extend(seconds) {
         this.remaining += seconds;
         if (!this.interval) {
             this.interval = setInterval(() => {
@@ -64,7 +69,7 @@ extend(seconds) {
             }, 1000);
         }
     }
-}
+
 
 function create_timer(event, form)
 {
