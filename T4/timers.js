@@ -14,6 +14,9 @@ function update_stats() {
     Hint: use Array.reduce on timers;
     */
 
+    let num_expired = 0;
+    let num_active = 0;
+    let avg_seconds = 0;
     const stats = timers.reduce(
         (acc,t)=>{
             if(t.remaining > 0){
@@ -27,10 +30,10 @@ function update_stats() {
         {num_active: 0, num_expired: 0, avg_seconds: 0}
     );
 
-    if(acc.num_active_timers == 0){
-        acc.avg_seconds = 0
+    if(stats.num_active_timers == 0){
+        stats.avg_seconds = 0
     }else{
-        acc.avg_seconds = acc.avg_seconds/acc.num_active;
+        stats.avg_seconds = stats.avg_seconds/stats.num_active;
     }
 
     num_active = stats.num_active;
