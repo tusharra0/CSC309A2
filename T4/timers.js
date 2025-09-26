@@ -30,7 +30,11 @@ function update_stats() {
         {num_active: 0, num_expired: 0, avg_seconds: 0}
     );
 
-    acc.avg_seconds = acc.avg_seconds/acc.num_active;
+    if(acc.num_active_timers == 0){
+        acc.avg_seconds = 0
+    }else{
+        acc.avg_seconds = acc.avg_seconds/acc.num_active;
+    }
 
     num_active_timers.innerHTML = num_active;
     num_expired_timers.innerHTML = num_expired;
