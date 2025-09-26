@@ -74,9 +74,7 @@ class Timer {
 
     /* TODO: Add other methods as you see fit */
 }
-}
-
-function extend(seconds) {
+extend(seconds) {
         this.remaining += seconds;
         if (!this.interval) {
             this.interval = setInterval(() => {
@@ -91,6 +89,9 @@ function extend(seconds) {
             }, 1000);
         }
     }
+}
+
+
 
 
 function create_timer(event, form)
