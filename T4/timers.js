@@ -17,6 +17,21 @@ function update_stats() {
     let num_active = 0;
     let avg_seconds = 0;
 
+    const stats = timers.reduce(
+        (acc,t)=>{
+            if(t.remaining > 0){
+                acc.num_active += 1;
+                acc.avg_seconds += t.remaining
+            }else{
+                acc.num_expired += 1;
+            }
+            return acc;
+        },
+        {num_active: 0, num_expired: 0, avg_seconds: 0}
+    );
+
+    acc.avg_seconds = acc.avg_seconds/acc.num_active;
+
     num_active_timers.innerHTML = num_active;
     num_expired_timers.innerHTML = num_expired;
     avg_remain_time.innerHTML = Math.ceil(avg_seconds);
