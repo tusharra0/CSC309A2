@@ -13,7 +13,12 @@ function update_stats() {
     /* TODO: Complete these stats calculations. 
     Hint: use Array.reduce on timers;
     */
-
+    if (timers.length === 0) {
+        num_active_timers.innerHTML = 0;
+        num_expired_timers.innerHTML = 0;
+        avg_remain_time.innerHTML = 0;
+        return;
+    }
     let num_expired = 0;
     let num_active = 0;
     let avg_seconds = 0;
@@ -52,6 +57,8 @@ class Timer {
         /* TODO: Complete the constructor and start a periodic callback
          * using setInterval to update the timer value once every 1 second.
          * When the timer reaches 0, the countdown should stop. */
+        
+        
         this.remaining = minutes * 60 + seconds;
         this.update = update;
         this.remove = remove;
@@ -66,6 +73,7 @@ class Timer {
 
             }else { 
                 clearInterval(this.interval); 
+                this.interval = null;
             }
 
         update_stats();
