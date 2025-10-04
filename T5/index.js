@@ -86,9 +86,9 @@ app.post("/notes", (req, res) => {
         if (typeof completed === "boolean") {
         completedBool = completed;
         } else if (typeof completed === "string") {
-        if (completed === "true") completedBool = true;
-        else if (completed === "false") completedBool = false;
-        else return res.status(400).send("Bad request");
+            if (completed === "true") completedBool = true;
+            else if (completed === "false") completedBool = false;
+            else return res.status(400).send("Bad request");
         } else {
         return res.status(400).send("Bad request");
         }
