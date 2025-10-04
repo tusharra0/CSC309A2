@@ -28,16 +28,19 @@ app.get("/", (req, res) => {
 // ADD YOUR WORK HERE
 const data = [
   {
+    id: 0,
     title: "Buy groceries",
     description: "Milk, Bread, Eggs, Butter",
     completed: false
   },
   {
+    id: 1,
     title: "Walk the dog",
     description: "Take Bella for a walk in the park",
     completed: true
   },
   {
+    id: 2,
     title: "Read a book",
     description: "Finish reading 'The Great Gatsby'",
     completed: false
@@ -63,9 +66,9 @@ app.get("/notes", (req, res) => {
     let filteredNotes = data;
 
   if (done === "true") {
-    filteredNotes = notes.filter(note => note.completed === true);
+    filteredNotes = data.filter(note => note.completed === true);
   } else if (done === "false") {
-    filteredNotes = notes.filter(note => note.completed === false);
+    filteredNotes = data.filter(note => note.completed === false);
   }else if (done !== undefined) {
   
     return res.status(400).send("Bad request");
@@ -81,6 +84,7 @@ app.post("/notes", (req, res) => {
   const { title, description, completed } = req.body;
 
   const newNote = {
+    id: data.length,
     title,
     description,
     completed: completed === undefined ? false : Boolean(completed)
