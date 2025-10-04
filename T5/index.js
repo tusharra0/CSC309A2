@@ -100,7 +100,7 @@ app.patch("/notes/:noteId", (req, res) => {
   req.note.completed = (done === "true");
   return res.status(200).json(req.note); 
 
-
+});
 
 // ==================
 
