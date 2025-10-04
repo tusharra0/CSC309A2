@@ -28,24 +28,22 @@ app.get("/", (req, res) => {
 // ADD YOUR WORK HERE
 const data = [
   {
-    id: 0,
     title: "Buy groceries",
     description: "Milk, Bread, Eggs, Butter",
     completed: false
   },
   {
-    id: 1,
     title: "Walk the dog",
     description: "Take Bella for a walk in the park",
     completed: true
   },
   {
-    id: 2,
     title: "Read a book",
     description: "Finish reading 'The Great Gatsby'",
     completed: false
   }
 ];
+
 
 app.param("noteId", (req, res, next, noteId) => {
   const id = Number(noteId);
@@ -66,9 +64,9 @@ app.get("/notes", (req, res) => {
     let filteredNotes = data;
 
   if (done === "true") {
-    filteredNotes = data.filter(note => note.completed === true);
+    filteredNotes = data.filter(n => n.completed === true);
   } else if (done === "false") {
-    filteredNotes = data.filter(note => note.completed === false);
+    filteredNotes = data.filter(n => n.completed === false);
   }else if (done !== undefined) {
   
     return res.status(400).send("Bad request");
@@ -83,15 +81,32 @@ app.get("/notes/:noteId", (req, res) => {
 app.post("/notes", (req, res) => {
   const { title, description, completed } = req.body;
 
-  const newNote = {
-    id: data.length,
+    let completedBool = false;
+    if (completed !== undefined) {
+        if (typeof completed === "boolean") {
+        completedBool = completed;
+        } else if (typeof completed === "string") {
+        if (completed === "true") completedBool = true;
+        else if (completed === "false") completedBool = false;
+        else return res.status(400).send("Bad request");
+        } else {
+        return res.status(400).send("Bad request");
+        }
+    }
+
+  const id = data.length;
+
+  const stored = {
     title,
     description,
-    completed: completed === undefined ? false : Boolean(completed)
+    completed: completedBool
   };
+  data.push(stored);
 
-  data.push(newNote); 
-  res.status(201).json(newNote); 
+  return res.status(201).json({
+    id,
+    ...stored
+  });
 });
 
 app.patch("/notes/:noteId", (req, res) => {
