@@ -120,18 +120,6 @@ app.patch("/notes/:noteId", (req, res) => {
   return res.status(200).json(req.note); 
 
 });
-
-// ==================
-
-const server = app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-});
-
-server.on('error', (err) => {
-    console.error(`cannot start server: ${err.message}`);
-    process.exit(1);
-});
-
 const basicAuth = require('./middleware/basicAuth');
 
 app.get('/hello', basicAuth, (req, res) => {
@@ -275,3 +263,15 @@ app.patch('/notes/:noteId', basicAuth, async (req, res) => {
     return res.json(updated);
     
     });
+
+// ==================
+
+const server = app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+});
+
+server.on('error', (err) => {
+    console.error(`cannot start server: ${err.message}`);
+    process.exit(1);
+});
+
