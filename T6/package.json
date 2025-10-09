@@ -1,0 +1,26 @@
+{
+  "name": "t6",
+  "version": "1.0.0",
+  "description": "t6",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": " https://markus.teach.cs.toronto.edu/git/markus/csc309-2025-09/notadome"
+  },
+  "keywords": [
+    "t6"
+  ],
+  "author": "domenico nota",
+  "license": "ISC",
+  "dependencies": {
+    "@prisma/client": "^6.17.0",
+    "express": "^5.1.0",
+    "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "prisma": "^6.17.0"
+  }
+}
