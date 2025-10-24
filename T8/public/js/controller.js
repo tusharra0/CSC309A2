@@ -15,20 +15,17 @@ function getDataEl() {
   return document.getElementById('data');
 }
 
-function buildParagraphNode(item) {
+function buildParagraph(item) {
   const wrap = document.createElement('div');
   wrap.id = `paragraph_${item.id}`;
-
   const p = document.createElement('p');
   p.textContent = item.content + ' ';
   const b = document.createElement('b');
   b.textContent = '(Paragraph: )';
   p.appendChild(b);
-
   const btn = document.createElement('button');
   btn.className = 'btn like';
   btn.textContent = `Likes: ${item.likes}`;
-
   wrap.appendChild(p);
   wrap.appendChild(btn);
   return wrap;
@@ -40,14 +37,13 @@ async function fetchPage(startNumber) {
 
   const res = await fetch(`/text?paragraph=${startNumber}`);
   const payload = await res.json();
-
   const container = getDataEl();
   payload.data.forEach(item => {
-    container.appendChild(buildParagraphNode(item));
+    container.appendChild(buildParagraph(item));
   });
-
   hasMore = !!payload.next;
   nextStart += PAGE_SIZE;
+
 
   if (!hasMore) {
     const endP = document.createElement('p');
