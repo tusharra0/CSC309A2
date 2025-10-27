@@ -1,8 +1,9 @@
 {
-    "total_points": 33.34304347826087,
-    "total_available_points": 39,
+    "comment": "You can do better, try to focus on understanding the course materials better! Do not hesitate to come to office hours or ask questions on Piazza. ",
+    "total_points": 28.12304347826087,
+    "total_available_points": 32.7,
     "in_lecture_exercises": {
-        "marks_earned": 5.8,
+        "marks_earned": 0.58,
         "notes": "Each lecture exercise is out of 0.1% and we are taking the best 10 out of 12. For now, we have 7 lecture exercises in total. So there's no need to take best 10 out of 12.",
         "details": {
             "lecture_1_exercise": 100.0,
