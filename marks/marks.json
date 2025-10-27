@@ -1,0 +1,45 @@
+{
+    "total_points": 33.34304347826087,
+    "total_available_points": 39,
+    "in_lecture_exercises": {
+        "marks_earned": 5.8,
+        "notes": "Each lecture exercise is out of 0.1% and we are taking the best 10 out of 12. For now, we have 7 lecture exercises in total. So there's no need to take best 10 out of 12.",
+        "details": {
+            "lecture_1_exercise": 100.0,
+            "lecture_2_exercise": 100.0,
+            "lecture_3_exercise": 90.0,
+            "lecture_4_exercise": 0.0,
+            "lecture_5_exercise": 100.0,
+            "lecture_6_exercise": 90.0,
+            "lecture_7_exercise": 100.0
+        }
+    },
+    "tutorials": {
+        "marks_earned": 11.78804347826087,
+        "notes": "Each tutorial is worth 2%. For now, we have 6 tutorials in total.",
+        "details": {
+            "T1": 93.75,
+            "T2": 95.65217391304348,
+            "T3": 100.0,
+            "T4": 100.0,
+            "T5": 100.0,
+            "T6": 100.0
+        }
+    },
+    "assignment_1": {
+        "marks_earned": 5.0,
+        "notes": "Assignment 1 is worth 5%.",
+        "details": {
+            "assignment_1_score": 100.0
+        }
+    },
+    "midterm": {
+        "marks_earned": 10.755,
+        "notes": "Midterm is worth 15%.",
+        "details": {
+            "midterm_score": 71.7
+        },
+        "crowdmark_url": "https://app.crowdmark.com/score/5ab9f7d5-3df0-4deb-8df5-c8abcad69af5",
+        "midterm_version": "v2"
+    }
+}
