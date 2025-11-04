@@ -1,0 +1,32 @@
+.todo-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5em;
+}
+
+.todo-item span {
+    flex: 1;
+    text-align: left;
+    padding: 0.5rem 0;
+}
+
+.todo-item span.completed {
+    text-decoration: line-through;
+    color: #bbb;
+}
+
+.todo-item [type="checkbox"] {
+    transform: scale(1.4) translateX(2px);
+}
+
+.todo-item a {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.todo-item a img {
+    height: 1.5rem;
+}
