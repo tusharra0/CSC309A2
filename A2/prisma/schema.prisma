@@ -35,4 +35,39 @@ model User {
   password String
   role String @default("regular")
   verified Boolean @default(false)
+  expiresAt DateTime
+  resetToken String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  points               Int       @default(0)
+  birthday             DateTime?
+  lastLogin            DateTime?
+  avatarUrl            String?
+  promotions           UserPromotion[]
+}
+
+model Promotion {
+  id           Int              @id @default(autoincrement())
+  name         String
+  type         PromotionType
+  minSpending  Int?
+  rate         Float?
+  points       Int?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  assignments  UserPromotion[]
+}
+
+model UserPromotion {
+  id           Int        @id @default(autoincrement())
+  user         User       @relation(fields: [userId], references: [id])
+  userId       Int
+  promotion    Promotion  @relation(fields: [promotionId], references: [id])
+  promotionId  Int
+  used         Boolean    @default(false)
+  usedAt       DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([userId, promotionId])
 }
