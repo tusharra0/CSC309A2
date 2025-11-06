@@ -31,7 +31,6 @@ const SALT_ROUNDS = 10;
 const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
-const sharp = require("sharp");
 app.use("/uploads", express.static(path.join(__dirname, "public", "uploads")));
 
 
@@ -427,10 +426,7 @@ app.patch("/users/me", requireAuth, upload.single("avatar"), async (req, res) =>
       const filename = `${current.utorid}.png`; 
       const filepath = path.join(dir, filename);
 
-      await sharp(req.file.buffer)
-        .png()
-        .toFile(filepath);
-
+      fs.writeFileSync(filepath, req.file.buffer);
       avatarUrl = `/uploads/avatars/${filename}`;
       updates.avatarUrl = avatarUrl;
     }
