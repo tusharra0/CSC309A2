@@ -1,4 +1,5 @@
 import "./App.css";
+import { useState } from "react";
 
 // You can use this to seed your TODO list
 const seed = [
@@ -10,9 +11,42 @@ const seed = [
 ];
 
 function App() {
-    // Complete me
+  const [todos, setTodos] = useState([
+    { id: 0, text: "Example todo", completed: false },
+  ]);
 
-    return <h1>Complete me</h1>;
+  const toggleTodo = (id) => {
+    const updated = todos.map((t) => {
+      if (t.id === id) {
+        return {
+          id: t.id,
+          text: t.text,
+          completed: !t.completed,
+        };
+      } else {
+        return t;
+      }
+    });
+
+    setTodos(updated);
+  };
+
+  return (
+    <div className="app">
+      <h1>My ToDos</h1>
+
+      {todos.map((todo) => (
+        <div key={todo.id}>
+          <input
+            type="checkbox"
+            checked={todo.completed}
+            onChange={() => toggleTodo(todo.id)}
+          />
+          <span>{todo.text}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default App;
