@@ -413,6 +413,7 @@ app.post("/auth/tokens", async (req, res) => {
   }
 });
 
+
 app.get("/users/me", requireAuthRegular, async (req, res) => {
   try {
     const uid = getCurrentUserId(req);
