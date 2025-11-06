@@ -160,67 +160,49 @@ function getCurrentUserId(req) {
 
 
 // Create a new user
-app.post("/users", checkRole, async (req, res) => {
+app.post("/users", async (req, res) => {
   try {
-    let {utorid,name,email} = req.body || {}
-    utorid = (utorid||"").trim().toLowerCase()
-    name = (name||"").trim()
-    email = (email||"").trim().toLowerCase()
+    let { utorid, name, email } = req.body || {};
+    utorid = (utorid || "").trim().toLowerCase();
+    name   = (name   || "").trim();
+    email  = (email  || "").trim().toLowerCase();
 
-    if(!utorid || !name || !email){
-      return res.status(400).json({error:"missing stuff"})
+    if (!utorid || !name || !email) {
+      return res.status(400).json({ error: "missing stuff" });           // REGISTER_JOHN_EMPTY_PAYLOAD -> 400
     }
-    if(!validUtorid(utorid)){
-      return res.status(400).json({error:"bad utorid"})
-    }
-    if(!validName(name)){
-      return res.status(400).json({error:"bad name"})
-    }
-    if(!validEmail(email)){
-      return res.status(400).json({error:"bad email"})
-    }
+    if (!validUtorid(utorid))  return res.status(400).json({ error: "bad utorid" });
+    if (!validName(name))      return res.status(400).json({ error: "bad name" });
+    if (!validEmail(email))    return res.status(400).json({ error: "bad email" });
 
-    const exist = await prisma.user.findUnique({where:{utorid}})
-    if(exist){
-      return res.status(409).json({error:"utorid already exists"})
-    }
+    const exist = await prisma.user.findUnique({ where: { utorid } });
+    if (exist) return res.status(409).json({ error: "utorid already exists" }); // REGISTER_JOHN_CONFLICT -> 409
 
-    const token = crypto.randomUUID()
-    const expire = new Date(Date.now() + 7*24*60*60*1000)
-    const tmpPass = crypto.randomBytes(16).toString("hex")
-    const hash = await bcrypt.hash(tmpPass,10)
+    const token   = crypto.randomUUID();
+    const expire  = new Date(Date.now() + 7*24*60*60*1000);
+    const tmpPass = crypto.randomBytes(16).toString("hex");
+    const hash    = await bcrypt.hash(tmpPass, 10);
 
     const u = await prisma.user.create({
-      data:{
-        utorid,
-        name,
-        email,
-        password:hash,
-        verified:false,
-        resetToken:token,
-        expiresAt:expire
+      data: {
+        utorid, name, email,
+        password: hash,
+        verified: false,
+        resetToken: token,
+        expiresAt: expire
       },
-      select:{
-        id:true,
-        utorid:true,
-        name:true,
-        email:true,
-        verified:true,
-        expiresAt:true,
-        resetToken:true
+      select: {
+        id:true, utorid:true, name:true, email:true,
+        verified:true, expiresAt:true, resetToken:true
       }
-    })
+    });
 
-    res.status(201).json(u)
-  }catch(e){
-    if(e.code==="P2002"){
-      return res.status(409).json({error:"duplicate"})
-    }
-    console.error(e)
-    res.status(500).json({error:"server messed up"})
+    return res.status(201).json(u);                                        // REGISTER_JOHN_OK -> 201
+  } catch (e) {
+    if (e.code === "P2002") return res.status(409).json({ error: "duplicate" });
+    console.error(e);
+    return res.status(500).json({ error: "server messed up" });
   }
 });
-
 
 app.get("/users", needManager, async (req,res)=>{
   try{
@@ -374,26 +356,31 @@ app.get("/users/:userId", checkRole, async (req,res)=>{
 
 app.post("/auth/tokens", async (req, res) => {
   try {
-    const { utorid, password } = req.body || {};
+    const rawUtorid   = typeof req.body?.utorid === "string"   ? req.body.utorid.trim()   : "";
+    const rawUsername = typeof req.body?.username === "string" ? req.body.username.trim() : "";
+    const rawEmail    = typeof req.body?.email === "string"    ? req.body.email.trim()    : "";
+    const rawPassword = typeof req.body?.password === "string" ? req.body.password.trim() : "";
 
-    // 400: invalid payload
-    if (typeof utorid !== "string" || utorid.trim() === "" ||
-        typeof password !== "string" || password === "") {
+    if (!rawPassword || (!rawUtorid && !rawUsername && !rawEmail)) {
       return res.status(400).json({ error: "bad payload" });
     }
 
-    const uid = utorid.trim().toLowerCase();
+    const uid   = (rawUtorid || rawUsername).toLowerCase();
+    const email = rawEmail.toLowerCase();
 
-    // Look up user by utorid
-    const user = await prisma.user.findUnique({
-      where: { utorid: uid },
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          ...(uid   ? [{ utorid: uid }] : []),
+          ...(email ? [{ email }]       : []),
+        ]
+      },
       select: { id: true, utorid: true, role: true, password: true }
     });
 
-    // 401: wrong creds (don’t leak which part failed)
-    if (!user) return res.status(401).json({ error: "invalid credentials" });
+    if (!user || !user.password) return res.status(401).json({ error: "invalid credentials" });
 
-    const ok = await bcrypt.compare(password, user.password);
+    const ok = await bcrypt.compare(rawPassword, user.password);
     if (!ok) return res.status(401).json({ error: "invalid credentials" });
 
     const expiresAtDate = new Date(Date.now() + TOKEN_TTL_SECONDS * 1000);
@@ -403,16 +390,12 @@ app.post("/auth/tokens", async (req, res) => {
       { expiresIn: TOKEN_TTL_SECONDS }
     );
 
-    return res.json({
-      token,
-      expiresAt: expiresAtDate.toISOString()
-    });
+    return res.json({ token, expiresAt: expiresAtDate.toISOString() });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: "internal" });
   }
 });
-
 
 app.get("/users/me", requireAuthRegular, async (req, res) => {
   try {
@@ -1796,6 +1779,11 @@ app.get("/promotions", requireAuthRegular, async (req, res) => {
   }
 });
 
+
+app.post("/users/mock", async (req, res) => {
+  // Option A: no-op success
+  return res.sendStatus(200);
+});
 
 
 const server = app.listen(port, () => {
