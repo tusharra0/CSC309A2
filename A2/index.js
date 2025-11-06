@@ -218,7 +218,70 @@ app.get("/users", needManager, async (req,res)=>{
     console.error(e)
     res.status(500).json({error:"server broke"})
   }
-})
+});
+
+app.get("/users/:userId", checkRole, async (req,res)=>{
+  try{
+    const id = parseInt(req.params.userId,10)
+    if(!Number.isInteger(id) || id<=0){
+      return res.status(400).json({error:"bad user id"})
+    }
+
+    const user = await prisma.user.findUnique({
+      where:{ id:id },
+      select:{
+        id:true,
+        utorid:true,
+        name:true,
+        points:true,
+        verified:true,
+        promotions:{
+          where:{
+            used:false,
+            promotion:{ type:"onetime" }
+          },
+          select:{
+            promotion:{
+              select:{
+                id:true,
+                name:true,
+                minSpending:true,
+                rate:true,
+                points:true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if(!user){
+      return res.status(404).json({error:"not found"})
+    }
+
+    const promos = user.promotions.map(x=>({
+      id:x.promotion.id,
+      name:x.promotion.name,
+      minSpending:x.promotion.minSpending,
+      rate:x.promotion.rate,
+      points:x.promotion.points
+    }))
+
+    const out = {
+      id:user.id,
+      utorid:user.utorid,
+      name:user.name,
+      points:user.points,
+      verified:user.verified,
+      promotions:promos
+    }
+
+    res.json(out)
+  }catch(e){
+    console.error(e)
+    res.status(500).json({error:"server broke"})
+  }
+});
  
 const server = app.listen(port, () => {
     console.log(`Server running on port ${port}`);
