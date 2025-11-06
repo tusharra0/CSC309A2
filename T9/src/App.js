@@ -13,39 +13,36 @@ const seed = [
 ];
 
 function App() {
-  const [todos, setTodos] = useState([
-    { id: 0, text: "Example todo", completed: false },
-  ]);
+  const [todos, setTodos] = useState(seed);
+
+  const addTodo = (text) => {
+    setTodos((prev) => [
+      ...prev,
+      { id: prev.length ? Math.max(...prev.map(t => t.id)) + 1 : 0, text, completed: false },
+    ]);
+  };
 
   const toggleTodo = (id) => {
-    const updated = todos.map((t) => {
-      if (t.id === id) {
-        return {
-          id: t.id,
-          text: t.text,
-          completed: !t.completed,
-        };
-      } else {
-        return t;
-      }
-    });
+    setTodos((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
+    );
+  };
 
-    setTodos(updated);
+  const deleteTodo = (id) => {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
   };
 
   return (
     <div className="app">
       <h1>My ToDos</h1>
-        <NewTodo onAdd={addTodo} />
+      <NewTodo onAdd={addTodo} />
       {todos.map((todo) => (
-        <div key={todo.id}>
-          <input
-            type="checkbox"
-            checked={todo.completed}
-            onChange={() => toggleTodo(todo.id)}
-          />
-          <span>{todo.text}</span>
-        </div>
+        <TodoItem
+          key={todo.id}
+          todo={todo}
+          onToggle={toggleTodo}
+          onDelete={deleteTodo}
+        />
       ))}
     </div>
   );
