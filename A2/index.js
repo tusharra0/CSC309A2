@@ -23,7 +23,54 @@ const app = express();
 
 app.use(express.json());
 
-// ADD YOUR WORK HERE
+const { PrismaClient } = require("@prisma/client");
+const bcrypt = require("bcrypt");
+const prisma = new PrismaClient();
+
+
+// Create a new user
+app.post("/users", async (req, res) => {
+  try {
+    const { utorid, email, name, password } = req.body;
+
+    // Basic validation
+    if (!utorid || !email || !name || !password) {
+      return res.status(400).json({ error: "Some fields are missing." });
+    }
+
+    // Check if utorid or email already exists
+    const existing = await prisma.user.findFirst({
+      where: { OR: [{ utorid }, { email }] },
+    });
+    if (existing) {
+      return res.status(409).json({ error: "User exists already." });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user in DB
+    const newUser = await prisma.user.create({
+      data: {
+        utorid,
+        email,
+        name,
+        password: hashedPassword,
+      },
+    });
+
+    res.status(201).json({
+      id: newUser.id,
+      utorid: newUser.utorid,
+      name: newUser.name,
+      email: newUser.email,
+      verified: newUser.verified ?? false,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: " server error" });
+  }
+});
 
 
 const server = app.listen(port, () => {
