@@ -24,16 +24,15 @@ async function main() {
 
   await prisma.user.create({
     data: {
-      utorid: "clive123",
-      email: "clive.su@mail.utoronto.ca",
-      name: "clive123",
+      utorid: utorid,
+      email: email,
+      name: utorid,
       password: hashed,
-      role: "superuser",
-      verified: true,
-      expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), 
-      resetToken: "" 
+      role: 'superuser',
+      verified: true
     }
   });
+
   console.log("Super user added to the db")
 }
 main()
