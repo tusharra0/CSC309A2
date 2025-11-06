@@ -282,6 +282,204 @@ app.get("/users/:userId", checkRole, async (req,res)=>{
     res.status(500).json({error:"server broke"})
   }
 });
+
+
+app.get("/users/:userId", needManager, async (req, res) => {
+  try {
+    const id = parseInt(req.params.userId, 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: "bad user id" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        utorid: true,
+        name: true,
+        email: true,
+        birthday: true,
+        role: true,
+        points: true,
+        createdAt: true,
+        lastLogin: true,
+        verified: true,
+        avatarUrl: true,
+        promotions: {
+          where: {
+            used: false,
+            promotion: { is: { type: "onetime" } }
+          },
+          select: {
+            promotion: {
+              select: {
+                id: true,
+                name: true,
+                minSpending: true,
+                rate: true,
+                points: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    const promotions = user.promotions.map(x => ({
+      id: x.promotion.id,
+      name: x.promotion.name,
+      minSpending: x.promotion.minSpending,
+      rate: x.promotion.rate,
+      points: x.promotion.points
+    }));
+
+    res.json({
+      id: user.id,
+      utorid: user.utorid,
+      name: user.name,
+      email: user.email,
+      birthday: user.birthday ? user.birthday.toISOString().slice(0, 10) : null,
+      role: user.role,
+      points: user.points,
+      createdAt: user.createdAt,
+      lastLogin: user.lastLogin,
+      verified: user.verified,
+      avatarUrl: user.avatarUrl,
+      promotions
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "server broke" });
+  }
+});
+
+
+app.patch("/users/:userId", needManager, async (req, res) => {
+  try {
+    const id = parseInt(req.params.userId, 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: "bad user id" });
+    }
+
+    const callerRole = String(req.headers["x-role"] || "").toLowerCase();
+
+    const { email, verified, suspicious, role } = req.body || {};
+
+    if (
+      email === undefined &&
+      verified === undefined &&
+      suspicious === undefined &&
+      role === undefined
+    ) {
+      return res.status(400).json({ error: "no updatable fields" });
+    }
+
+    const current = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, utorid: true, name: true, role: true, suspicious: true, email: true }
+    });
+    if (!current) return res.status(404).json({ error: "not found" });
+
+   
+    const updates = {};
+    if (email !== undefined) {
+      const em = String(email).trim().toLowerCase();
+      if (!validEmail(em)) return res.status(400).json({ error: "bad email" });
+      if (em !== current.email) updates.email = em;
+    }
+
+    if (verified !== undefined) {
+      const v = toBool(verified);
+      if (v !== true) return res.status(400).json({ error: "verified must be true" });
+
+      updates.verified = true;
+    }
+
+
+    let targetRole = current.role;
+    if (role !== undefined) {
+      const r = String(role).trim().toLowerCase();
+      const allowedForManager = new Set(["regular", "cashier"]);
+      const allowedForSuper = new Set(["regular", "cashier", "manager", "superuser"]);
+
+      if (callerRole === "manager" && !allowedForManager.has(r)) {
+        return res.status(403).json({ error: "forbidden role change" });
+      }
+      if (callerRole === "superuser" && !allowedForSuper.has(r)) {
+        return res.status(400).json({ error: "bad role" });
+      }
+      if (callerRole !== "manager" && callerRole !== "superuser") {
+        return res.status(403).json({ error: "need manager or higher" });
+      }
+
+      targetRole = r;
+      if (targetRole !== current.role) updates.role = targetRole;
+    }
+
+   
+    let targetSuspicious = current.suspicious;
+
+    if (suspicious !== undefined) {
+      const s = toBool(suspicious);
+      if (s === undefined) return res.status(400).json({ error: "bad suspicious" });
+      targetSuspicious = s;
+    }
+
+    const finalRole = targetRole;
+    if (finalRole === "cashier") {
+      if (suspicious !== undefined && targetSuspicious === true) {
+        return res.status(400).json({ error: "cashier cannot be suspicious" });
+      }
+ 
+      if (current.role !== "cashier" || current.suspicious !== false) {
+        targetSuspicious = false;
+      }
+    } else {
+      
+    }
+
+    if (targetSuspicious !== current.suspicious) {
+      updates.suspicious = targetSuspicious;
+    }
+
+    
+    if (Object.keys(updates).length === 0) {
+      return res.json({
+        id: current.id,
+        utorid: current.utorid,
+        name: current.name
+      });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id },
+      data: updates,
+      select: { id: true, utorid: true, name: true, email: true, verified: true, suspicious: true, role: true }
+    });
+
+    
+    const resp = {
+      id: updated.id,
+      utorid: updated.utorid,
+      name: updated.name
+    };
+    for (const k of Object.keys(updates)) {
+      resp[k] = updated[k];
+    }
+
+    return res.json(resp);
+  } catch (e) {
+    if (e?.code === "P2002") {
+      return res.status(409).json({ error: "duplicate" }); // e.g., unique email conflict
+    }
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
  
 const server = app.listen(port, () => {
     console.log(`Server running on port ${port}`);
