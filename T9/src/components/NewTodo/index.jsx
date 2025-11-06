@@ -23,7 +23,7 @@ function NewTodo(props) {
   };
 
   return (
-    <div class="new-todo row">
+    <div className="new-todo row">
       <input
         type="text"
         placeholder="Enter a new task"

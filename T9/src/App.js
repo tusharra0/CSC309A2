@@ -1,5 +1,7 @@
 import "./App.css";
 import { useState } from "react";
+import NewTodo from "./components/NewTodo";
+import TodoItem from "./components/TodoItem";
 
 // You can use this to seed your TODO list
 const seed = [
