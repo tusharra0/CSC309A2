@@ -552,6 +552,508 @@ app.post("/auth/resets/:resetToken", async (req, res) => {
 });
 
 
+app.post("/transactions", checkRole, async (req, res) => {
+  try {
+    if (!req.user) attachAuth(req);
+
+    // ---- Validate payload ----
+    const { utorid, type, spent, promotionIds, remark } = req.body || {};
+
+    if (typeof utorid !== "string" || !validUtorid(utorid)) {
+      return res.status(400).json({ error: "bad utorid" });
+    }
+    if (type !== "purchase") {
+      return res.status(400).json({ error: "type must be 'purchase'" });
+    }
+    const amount = Number(spent);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ error: "bad spent" });
+    }
+    if (promotionIds !== undefined && !Array.isArray(promotionIds)) {
+      return res.status(400).json({ error: "promotionIds must be an array" });
+    }
+    if (remark !== undefined && typeof remark !== "string") {
+      return res.status(400).json({ error: "bad remark" });
+    }
+
+    const customerUtorid = utorid.trim().toLowerCase();
+
+    // ---- Fetch customer + cashier ----
+    const [customer, cashier] = await Promise.all([
+      prisma.user.findUnique({
+        where: { utorid: customerUtorid },
+        select: { id: true, utorid: true, points: true }
+      }),
+      prisma.user.findUnique({
+        where: { id: req.user?.id ?? -1 },
+        select: { id: true, utorid: true, suspicious: true }
+      })
+    ]);
+
+    if (!customer) return res.status(404).json({ error: "user not found" });
+    if (!cashier) return res.status(401).json({ error: "unauthorized" });
+
+    // ---- Base points: 1 per $0.25, rounded to nearest ----
+    let earned = Math.round(amount * 4);
+
+    // ---- Validate and load promotions (onetime + assigned + unused) ----
+    let promos = [];
+    if (Array.isArray(promotionIds) && promotionIds.length > 0) {
+      // unique IDs only
+      const ids = [...new Set(promotionIds.map((x) => Number(x)).filter(Number.isFinite))];
+      if (ids.length !== promotionIds.length) {
+        return res.status(400).json({ error: "invalid promotion id(s)" });
+      }
+
+      const assigned = await prisma.userPromotion.findMany({
+        where: {
+          userId: customer.id,
+          used: false,
+          promotion: { is: { id: { in: ids }, type: "onetime" } }
+        },
+        select: {
+          id: true,
+          promotion: { select: { id: true, name: true, minSpending: true, rate: true, points: true } }
+        }
+      });
+
+      // Must match all requested IDs
+      const assignedIds = new Set(assigned.map((a) => a.promotion.id));
+      const missing = ids.filter((pid) => !assignedIds.has(pid));
+      if (missing.length > 0) {
+        return res.status(400).json({ error: "invalid promotions" });
+      }
+
+      // Check minSpending and collect promos
+      for (const a of assigned) {
+        const p = a.promotion;
+        if (p.minSpending != null && amount < p.minSpending) {
+          return res.status(400).json({ error: "promotion minSpending not met" });
+        }
+        promos.push({ id: p.id, rate: p.rate ?? null, points: p.points ?? null, userPromoId: a.id });
+      }
+
+      // Apply promos: multiplicative rates, then add flat points
+      const totalRate = promos.reduce((acc, p) => (p.rate ? acc * p.rate : acc), 1);
+      earned = Math.round(earned * totalRate);
+      const addPoints = promos.reduce((acc, p) => acc + (p.points || 0), 0);
+      earned += addPoints;
+    }
+
+    // ---- If cashier is suspicious, hold points (do not add to balance now) ----
+    const creditNow = cashier.suspicious !== true;
+    const remarkText = (remark || "").trim();
+
+    // ---- Persist transaction and promo links; update points/userpromotions in a transaction ----
+    const result = await prisma.$transaction(async (tx) => {
+      // Create transaction
+      const t = await tx.transaction.create({
+        data: {
+          type: "purchase",
+          spent: amount,
+          earned: earned,
+          remark: remarkText,
+          userId: customer.id,
+          createdById: cashier.id
+        },
+        select: { id: true }
+      });
+
+      // Link promos (if your schema has a join table)
+      if (promos.length > 0) {
+        await tx.transactionPromotion.createMany({
+          data: promos.map((p) => ({ transactionId: t.id, promotionId: p.id }))
+        });
+
+        // Mark user-promotions as used
+        await tx.userPromotion.updateMany({
+          where: { id: { in: promos.map((p) => p.userPromoId) } },
+          data: { used: true, usedAt: new Date() }
+        });
+      }
+
+      // Credit points now if cashier not suspicious
+      if (creditNow && earned > 0) {
+        await tx.user.update({
+          where: { id: customer.id },
+          data: { points: customer.points + earned }
+        });
+      }
+
+      return t;
+    });
+
+    return res.status(201).json({
+      id: result.id,
+      utorid: customer.utorid,
+      type: "purchase",
+      spent: Number(amount.toFixed(2)),
+      earned,
+      remark: remark ? remarkText : "",
+      promotionIds: Array.isArray(promotionIds) ? promotionIds : [],
+      createdBy: cashier.utorid
+    });
+  } catch (e) {
+    console.error(e);
+    // Any validation failure above should have returned 400; unexpected issues → 500
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+
+// POST /transactions (adjustment)
+// Clearance: Manager or higher
+app.post("/transactions", needManager, async (req, res) => {
+  try {
+    if (!req.user) attachAuth(req);
+
+    const { utorid, type, amount, relatedId, promotionIds, remark } = req.body || {};
+
+    // ---- Basic validation ----
+    if (type !== "adjustment") {
+      return res.status(400).json({ error: "type must be 'adjustment'" });
+    }
+    if (typeof utorid !== "string" || !validUtorid(utorid)) {
+      return res.status(400).json({ error: "bad utorid" });
+    }
+    if (!Number.isFinite(Number(amount))) {
+      return res.status(400).json({ error: "bad amount" });
+    }
+    // force integer points (positive or negative, not zero-only)
+    const pts = Math.trunc(Number(amount));
+    if (pts === 0) {
+      return res.status(400).json({ error: "amount must be non-zero integer" });
+    }
+
+    if (!Number.isFinite(Number(relatedId)) || Number(relatedId) <= 0) {
+      return res.status(400).json({ error: "bad relatedId" });
+    }
+    const relId = Number(relatedId);
+
+    if (promotionIds !== undefined && !Array.isArray(promotionIds)) {
+      return res.status(400).json({ error: "promotionIds must be an array" });
+    }
+    if (remark !== undefined && typeof remark !== "string") {
+      return res.status(400).json({ error: "bad remark" });
+    }
+
+    const customerUtorid = utorid.trim().toLowerCase();
+
+    // ---- Load customer, manager (creator), and related transaction ----
+    const [customer, creator, relatedTx] = await Promise.all([
+      prisma.user.findUnique({
+        where: { utorid: customerUtorid },
+        select: { id: true, utorid: true, points: true }
+      }),
+      prisma.user.findUnique({
+        where: { id: req.user?.id ?? -1 },
+        select: { id: true, utorid: true }
+      }),
+      prisma.transaction.findUnique({
+        where: { id: relId },
+        select: { id: true, userId: true }
+      })
+    ]);
+
+    if (!customer) return res.status(404).json({ error: "user not found" });
+    if (!creator) return res.status(401).json({ error: "unauthorized" });
+
+    // Related transaction must exist and belong to the same user
+    if (!relatedTx || relatedTx.userId !== customer.id) {
+      // Treat as invalid reference
+      return res.status(400).json({ error: "invalid relatedId" });
+    }
+
+    // ---- Validate promotions (optional) ----
+    // We accept only assigned, unused one-time promos for this user.
+    // (They do NOT change the amount; we just mark them as used.)
+    let appliedUserPromoIds = [];
+    let appliedPromoIds = [];
+    if (Array.isArray(promotionIds) && promotionIds.length > 0) {
+      const ids = [...new Set(
+        promotionIds.map(n => Number(n)).filter(Number.isFinite)
+      )];
+
+      if (ids.length !== promotionIds.length) {
+        return res.status(400).json({ error: "invalid promotion id(s)" });
+      }
+
+      const assigned = await prisma.userPromotion.findMany({
+        where: {
+          userId: customer.id,
+          used: false,
+          promotion: { is: { id: { in: ids }, type: "onetime" } }
+        },
+        select: {
+          id: true,
+          promotion: { select: { id: true } }
+        }
+      });
+
+      const assignedSet = new Set(assigned.map(a => a.promotion.id));
+      const missing = ids.filter(id => !assignedSet.has(id));
+      if (missing.length > 0) {
+        return res.status(400).json({ error: "invalid promotions" });
+      }
+
+      appliedUserPromoIds = assigned.map(a => a.id);
+      appliedPromoIds = assigned.map(a => a.promotion.id);
+    }
+
+    const remarkText = (remark || "").trim();
+
+    // ---- Persist: create transaction, link promos, update points ----
+    const result = await prisma.$transaction(async (tx) => {
+      const t = await tx.transaction.create({
+        data: {
+          type: "adjustment",
+          spent: 0,
+          earned: pts,
+          remark: remarkText,
+          userId: customer.id,
+          createdById: creator.id,
+          // store relatedId if your schema has a column; otherwise link via remark
+          relatedId: relId // remove if you don't have this column
+        },
+        select: { id: true }
+      });
+
+      if (appliedPromoIds.length > 0) {
+        await tx.transactionPromotion.createMany({
+          data: appliedPromoIds.map(pid => ({
+            transactionId: t.id,
+            promotionId: pid
+          }))
+        });
+
+        await tx.userPromotion.updateMany({
+          where: { id: { in: appliedUserPromoIds } },
+          data: { used: true, usedAt: new Date() }
+        });
+      }
+
+      // Apply the adjustment immediately
+      await tx.user.update({
+        where: { id: customer.id },
+        data: { points: customer.points + pts }
+      });
+
+      return t;
+    });
+
+    return res.status(201).json({
+      id: result.id,
+      utorid: customer.utorid,
+      amount: pts,
+      type: "adjustment",
+      relatedId: relId,
+      remark: remark ? remarkText : "",
+      promotionIds: Array.isArray(promotionIds) ? promotionIds : [],
+      createdBy: creator.utorid
+    });
+  } catch (e) {
+    // If we referenced a column that doesn't exist (e.g., relatedId), you can remove it above.
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+// Utility helpers (reuse your existing ones if present)
+function parseBool(v) {
+  if (v === undefined) return undefined;
+  const s = String(v).toLowerCase();
+  if (s === "true") return true;
+  if (s === "false") return false;
+  return undefined; // invalid
+}
+function parseIntParam(v) {
+  const n = Number(v);
+  return Number.isInteger(n) ? n : undefined;
+}
+function parseNum(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+// GET /transactions
+// Clearance: Manager or higher
+app.get("/transactions", needManager, async (req, res) => {
+  try {
+    if (!req.user) attachAuth(req);
+
+    const {
+      name,
+      createdBy,
+      suspicious,
+      promotionId,
+      type,
+      relatedId,
+      amount,
+      operator,
+      page = "1",
+      limit = "10"
+    } = req.query;
+
+    // --- Validate query params ---
+    const pageNum  = parseIntParam(page)  ?? 1;
+    const limitNum = parseIntParam(limit) ?? 10;
+    if (pageNum <= 0 || limitNum <= 0) {
+      return res.status(400).json({ error: "bad pagination" });
+    }
+
+    const suspiciousBool = parseBool(suspicious);
+    if (suspicious !== undefined && suspiciousBool === undefined) {
+      return res.status(400).json({ error: "bad suspicious" });
+    }
+
+    const promoId = promotionId !== undefined ? parseIntParam(promotionId) : undefined;
+    if (promotionId !== undefined && promoId === undefined) {
+      return res.status(400).json({ error: "bad promotionId" });
+    }
+
+    const relId = relatedId !== undefined ? parseIntParam(relatedId) : undefined;
+    if (relatedId !== undefined && relId === undefined) {
+      return res.status(400).json({ error: "bad relatedId" });
+    }
+
+    const amt = amount !== undefined ? parseNum(amount) : undefined;
+    if (amount !== undefined && amt === undefined) {
+      return res.status(400).json({ error: "bad amount" });
+    }
+    if ((amount !== undefined && operator === undefined) ||
+        (operator !== undefined && amount === undefined)) {
+      return res.status(400).json({ error: "amount and operator must be used together" });
+    }
+    if (operator !== undefined && !["gte","lte"].includes(String(operator))) {
+      return res.status(400).json({ error: "bad operator" });
+    }
+
+    if (relatedId !== undefined && type === undefined) {
+      return res.status(400).json({ error: "relatedId must be used with type" });
+    }
+
+    // Validate type only if provided
+    const typeStr = type !== undefined ? String(type).toLowerCase() : undefined;
+    if (typeStr && !["purchase","redemption","adjustment","event","transfer"].includes(typeStr)) {
+      return res.status(400).json({ error: "bad type" });
+    }
+
+    // --- Build Prisma where ---
+    const where = {};
+
+    // Filter by customer (utorid or name)
+    if (name && String(name).trim().length > 0) {
+      const q = String(name).trim();
+      where.user = {
+        OR: [
+          { utorid: { contains: q, mode: "insensitive" } },
+          { name:   { contains: q, mode: "insensitive" } }
+        ]
+      };
+    }
+
+    // Filter by creator utorid
+    if (createdBy && String(createdBy).trim().length > 0) {
+      const cb = String(createdBy).trim();
+      where.createdBy = {
+        utorid: { contains: cb, mode: "insensitive" }
+      };
+    }
+
+    // suspicious flag on transaction
+    if (suspiciousBool !== undefined) {
+      where.suspicious = suspiciousBool;
+    }
+
+    if (typeStr) where.type = typeStr;
+
+    if (relId !== undefined) where.relatedId = relId;
+
+    // amount filter against earned (points delta)
+    if (amt !== undefined && operator) {
+      where.earned = operator === "gte" ? { gte: amt } : { lte: amt };
+    }
+
+    // promotion join
+    if (promoId !== undefined) {
+      where.promos = { some: { promotionId: promoId } };
+    }
+
+    const skip = (pageNum - 1) * limitNum;
+    const take = limitNum;
+
+    // --- Query count and results ---
+    const [count, records] = await Promise.all([
+      prisma.transaction.count({ where }),
+      prisma.transaction.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          type: true,
+          spent: true,
+          earned: true,       // points delta (+/-)
+          remark: true,
+          suspicious: true,
+          relatedId: true,
+          user: { select: { id: true, utorid: true, name: true } },
+          createdBy: { select: { id: true, utorid: true } },
+          promos: { select: { promotionId: true } }
+        }
+      })
+    ]);
+
+    // --- Map to response shape ---
+    const results = records.map(t => {
+      const base = {
+        id: t.id,
+        utorid: t.user.utorid,
+        amount: t.earned,
+        type: t.type,
+        promotionIds: t.promos.map(p => p.promotionId),
+        remark: t.remark || "",
+        createdBy: t.createdBy?.utorid || null
+      };
+
+      // include spent for purchases
+      if (t.type === "purchase") {
+        base.spent = Number((t.spent ?? 0).toFixed(2));
+        base.suspicious = !!t.suspicious;
+      }
+
+      // include suspicious for adjustments too (spec example shows it)
+      if (t.type === "adjustment") {
+        base.relatedId = t.relatedId ?? null;
+        base.suspicious = !!t.suspicious;
+      }
+
+      // relatedId for redemption/event/transfer
+      if (t.type === "redemption") {
+        base.relatedId = t.relatedId ?? null;           // cashier userId or null
+        base.redeemed  = Math.abs(t.earned || 0);       // explicit redeemed field
+      }
+      if (t.type === "event") {
+        base.relatedId = t.relatedId ?? null;           // event id
+      }
+      if (t.type === "transfer") {
+        base.relatedId = t.relatedId ?? null;           // other user id
+      }
+
+      return base;
+    });
+
+    return res.json({ count, results });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+
+
+
 
 const server = app.listen(port, () => {
     console.log(`Server running on port ${port}`);
