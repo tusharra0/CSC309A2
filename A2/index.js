@@ -34,13 +34,14 @@ require("dotenv").config();
 const JWT_SECRET = process.env.JWT_SECRET || "dev_jwt_secret_change_me";
 const TOKEN_TTL_SECONDS = parseInt(process.env.JWT_TTL_SECONDS || "7200", 10); 
 
-function checkRole(req,res,next){
-  const role = (req.headers["x-role"] || "").toLowerCase()
-  if(role==="cashier" || role==="manager" || role==="superuser"){
-    next()
-  }else{
-    res.status(403).json({error:"need cashier or higher"})
-  }
+function checkRole(req, res, next) {
+  const roleHeader = req.headers["x-role"] ?? req.headers["role"]; // be lenient
+  const role = String(roleHeader || "").trim().toLowerCase();
+
+  if (!role) return res.status(401).json({ error: "unauthorized" }); // missing auth → 401
+  if (role === "cashier" || role === "manager" || role === "superuser") return next();
+
+  return res.status(403).json({ error: "forbidden" }); // wrong role → 403
 }
 
 function validUtorid(x){
