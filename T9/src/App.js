@@ -36,7 +36,7 @@ function App() {
   return (
     <div className="app">
       <h1>My ToDos</h1>
-
+        <NewTodo onAdd={addTodo} />
       {todos.map((todo) => (
         <div key={todo.id}>
           <input
