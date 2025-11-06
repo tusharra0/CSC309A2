@@ -28,7 +28,11 @@ const bcrypt = require("bcrypt");
 const prisma = new PrismaClient();
 const SALT_ROUNDS = 10;
 
+const jwt = require("jsonwebtoken");
+require("dotenv").config();
 
+const JWT_SECRET = process.env.JWT_SECRET || "dev_jwt_secret_change_me";
+const TOKEN_TTL_SECONDS = parseInt(process.env.JWT_TTL_SECONDS || "7200", 10); 
 
 function checkRole(req,res,next){
   const role = (req.headers["x-role"] || "").toLowerCase()
@@ -280,6 +284,50 @@ app.get("/users/:userId", checkRole, async (req,res)=>{
   }catch(e){
     console.error(e)
     res.status(500).json({error:"server broke"})
+  }
+});
+
+
+
+
+app.post("/auth/tokens", async (req, res) => {
+  try {
+    const { utorid, password } = req.body || {};
+
+    // 400: invalid payload
+    if (typeof utorid !== "string" || utorid.trim() === "" ||
+        typeof password !== "string" || password === "") {
+      return res.status(400).json({ error: "bad payload" });
+    }
+
+    const uid = utorid.trim().toLowerCase();
+
+    // Look up user by utorid
+    const user = await prisma.user.findUnique({
+      where: { utorid: uid },
+      select: { id: true, utorid: true, role: true, password: true }
+    });
+
+    // 401: wrong creds (don’t leak which part failed)
+    if (!user) return res.status(401).json({ error: "invalid credentials" });
+
+    const ok = await bcrypt.compare(password, user.password);
+    if (!ok) return res.status(401).json({ error: "invalid credentials" });
+
+    const expiresAtDate = new Date(Date.now() + TOKEN_TTL_SECONDS * 1000);
+    const token = jwt.sign(
+      { sub: user.id, role: user.role, utorid: user.utorid },
+      JWT_SECRET,
+      { expiresIn: TOKEN_TTL_SECONDS }
+    );
+
+    return res.json({
+      token,
+      expiresAt: expiresAtDate.toISOString()
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
   }
 });
  
