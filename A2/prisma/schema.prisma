@@ -53,6 +53,9 @@ model Promotion {
   id                   Int                    @id @default(autoincrement())
   name                 String
   type                 PromotionType
+  description          String?
+  startTime            DateTime?
+  endTime              DateTime?
   minSpending          Int?
   rate                 Float?
   points               Int?
