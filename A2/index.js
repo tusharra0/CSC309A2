@@ -91,14 +91,7 @@ function requireClearance(minRole) {
   }
 }
 
-function checkRole(req,res,next){
-  const role = (req.headers["x-role"] || "").toLowerCase()
-  if(role==="cashier" || role==="manager" || role==="superuser"){
-    next()
-  }else{
-    res.status(403).json({error:"need cashier or higher"})
-  }
-}
+
 
 function validUtorid(x){
   return /^[a-z0-9]{7,8}$/i.test(x)
@@ -121,13 +114,14 @@ function parseIdParam(value) {
   return Number.isInteger(num) && num > 0 ? num : null
 }
 
-function needManager(req,res,next){
-  const r = (req.headers["x-role"] || "").toLowerCase()
-  if(r==="manager" || r==="superuser"){
-    next()
-  }else{
-    res.status(403).json({error:"need manager or higher"})
-  }
+function checkRole(req, res, next) {
+  // cashier or higher
+  return requireClearance("cashier")(req, res, next);
+}
+
+function needManager(req, res, next) {
+  // manager or higher
+  return requireClearance("manager")(req, res, next);
 }
 
 function toBool(v){
