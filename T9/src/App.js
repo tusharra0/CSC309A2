@@ -14,23 +14,32 @@ const seed = [
 
 function App() {
   const [todos, setTodos] = useState(seed);
-
   const addTodo = (text) => {
-    setTodos((prev) => [
-      ...prev,
-      { id: prev.length ? Math.max(...prev.map(t => t.id)) + 1 : 0, text, completed: false },
-    ]);
+    setTodos((prev) => {
+        
+      const nextId = prev.length > 0 ? Math.max(...prev.map((t) => t.id)) + 1 : 0;
+
+      return [...prev, { id: nextId, text: text, completed: false }];
+    });
   };
+
 
   const toggleTodo = (id) => {
-    setTodos((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
-    );
-  };
+    setTodos((prev) => {
+      const updated = prev.map((t) => {
 
+        if (t.id === id) {
+          return { id: t.id, text: t.text, completed: !t.completed };
+        }
+        return t;
+      });
+      return updated;
+    });
+  };
   const deleteTodo = (id) => {
     setTodos((prev) => prev.filter((t) => t.id !== id));
   };
+
 
   return (
     <div className="app">
@@ -38,6 +47,7 @@ function App() {
       <NewTodo onAdd={addTodo} />
       {todos.map((todo) => (
         <TodoItem
+
           key={todo.id}
           todo={todo}
           onToggle={toggleTodo}
@@ -46,6 +56,8 @@ function App() {
       ))}
     </div>
   );
+
 }
+
 
 export default App;
