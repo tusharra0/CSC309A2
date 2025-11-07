@@ -1509,7 +1509,7 @@ app.get("/promotions/:promotionId", requireClearance("regular"), async (req, res
       id: promotion.id,
       name: promotion.name,
       description: promotion.description ?? null,
-       type: toApiPromotionType(promotion.type),
+      type: promotion.type,
       startTime: promotion.startTime ? promotion.startTime.toISOString() : null,
       endTime: promotion.endTime ? promotion.endTime.toISOString() : null,
       minSpending: promotion.minSpending ?? null,
@@ -1559,7 +1559,7 @@ app.delete("/promotions/:promotionId", needManager, async (req, res) => {
 });
 
 
-app.patch("/promotions/:promotionId", needManager, async (req, res) => {
+app.patch("/promotions/:promotionId", async (req, res) => {
   try {
     const promoId = parseInt(req.params.promotionId, 10);
     if (!Number.isInteger(promoId) || promoId <= 0) {
@@ -1605,18 +1605,7 @@ app.patch("/promotions/:promotionId", needManager, async (req, res) => {
     const startPassed = promotion.startTime && promotion.startTime <= now;
     const endPassed = promotion.endTime && promotion.endTime <= now;
 
-          if (
-      startPassed &&
-      (
-        wants.name ||
-        wants.description ||
-        wants.type ||
-        wants.startTime ||
-        wants.minSpending ||
-        wants.rate ||
-        wants.points
-      )
-    ) {
+    if (startPassed && (wants.name || wants.description || wants.type || wants.startTime || wants.minSpending || wants.rate || wants.points)) {
       return res.status(400).json({ error: "promotion already started" });
     }
 
@@ -1697,7 +1686,7 @@ app.patch("/promotions/:promotionId", needManager, async (req, res) => {
 
     if (wants.minSpending) {
       const value = Number(payload.minSpending);
-      if (!Number.isFinite(value) || value <= 0) {
+      if (!Number.isFinite(value) || value <= 0 || !Number.isInteger(value)) {
         return res.status(400).json({ error: "bad minSpending" });
       }
       data.minSpending = value;
@@ -1715,7 +1704,7 @@ app.patch("/promotions/:promotionId", needManager, async (req, res) => {
 
     if (wants.points) {
       const value = Number(payload.points);
-      if (!Number.isInteger(value) || value < 0) {
+      if (!Number.isInteger(value) || value <= 0) {
         return res.status(400).json({ error: "bad points" });
       }
       data.points = value;
@@ -1729,7 +1718,9 @@ app.patch("/promotions/:promotionId", needManager, async (req, res) => {
       return res.status(400).json({ error: "endTime must be after startTime" });
     }
 
-    
+    const rank = await resolveEffectiveRank(req);
+    if (rank === undefined) return res.status(401).json({ error: "unauthorized" });
+    if (rank < ROLE_RANK.manager) return res.status(403).json({ error: "forbidden" });
 
     const updated = await prisma.promotion.update({
       where: { id: promoId },
@@ -1908,14 +1899,8 @@ app.get("/promotions", requireAuthRegular, async (req, res) => {
   try {
     if (!req.user) attachAuth(req);
 
-        const {
-      name,
-      type,
-      page: pageParam,
-      limit: limitParam,
-      started: startedParam,
-      ended: endedParam
-    } = req.query || {};
+    const role = (req.user?.role || "").toLowerCase();
+    const { name, type, page: pageParam, limit: limitParam } = req.query || {};
 
     const page = toInt(pageParam, 1);
     const limit = toInt(limitParam, 10);
@@ -1940,97 +1925,32 @@ app.get("/promotions", requireAuthRegular, async (req, res) => {
       orderBy: { createdAt: "desc" }
     };
 
-     const rank = await resolveEffectiveRank(req);
-    if (rank === undefined) {
-      return res.status(401).json({ error: "unauthorized" });
+    if (role !== "regular") {
+      const skip = (page - 1) * limit;
+      const [count, records] = await Promise.all([
+        prisma.promotion.count({ where }),
+        prisma.promotion.findMany({ ...baseQuery, skip, take: limit })
+      ]);
+
+      const results = records.map((promo) => ({
+        id: promo.id,
+        name: promo.name,
+        type: toApiPromotionType(promo.type),
+        endTime:
+          promo.endTime instanceof Date
+            ? promo.endTime.toISOString()
+            : promo.endTime
+            ? new Date(promo.endTime).toISOString()
+            : null,
+        minSpending: promo.minSpending ?? null,
+        rate: promo.rate ?? null,
+        points: promo.points ?? null
+      }));
+
+      return res.json({ count, results });
     }
 
     const now = new Date();
-
-    if (rank >= ROLE_RANK.manager) {
-      const startedFilter = startedParam !== undefined ? toBool(startedParam) : undefined;
-      const endedFilter = endedParam !== undefined ? toBool(endedParam) : undefined;
-
-      if (startedParam !== undefined && startedFilter === undefined) {
-        return res.status(400).json({ error: "bad started" });
-      }
-
-      if (endedParam !== undefined && endedFilter === undefined) {
-        return res.status(400).json({ error: "bad ended" });
-      }
-
-      if (startedFilter !== undefined && endedFilter !== undefined) {
-        return res.status(400).json({ error: "cannot filter by both started and ended" });
-      }
-
-      if (startedFilter !== undefined) {
-        where.startTime = startedFilter ? { lte: now } : { gt: now };
-      }
-
-      if (endedFilter !== undefined) {
-        where.endTime = endedFilter ? { lte: now } : { gt: now };
-      }
-
-      const skip = (page - 1) * limit;
-      const [count, records] = await Promise.all([
-        prisma.promotion.count({ where }),
-        prisma.promotion.findMany({ ...baseQuery, skip, take: limit })
-      ]);
-
-      const results = records.map((promo) => ({
-        id: promo.id,
-        name: promo.name,
-        type: toApiPromotionType(promo.type),
-        startTime:
-          promo.startTime instanceof Date
-            ? promo.startTime.toISOString()
-            : promo.startTime
-            ? new Date(promo.startTime).toISOString()
-            : null,
-        endTime:
-          promo.endTime instanceof Date
-            ? promo.endTime.toISOString()
-            : promo.endTime
-            ? new Date(promo.endTime).toISOString()
-            : null,
-        minSpending: promo.minSpending ?? null,
-        rate: promo.rate ?? null,
-        points: promo.points ?? null
-      }));
-
-      return res.json({ count, results });
-    }
-
-    if (startedParam !== undefined || endedParam !== undefined) {
-      return res.status(403).json({ error: "forbidden" });
-    }
-
-    if (rank > ROLE_RANK.regular) {
-      const skip = (page - 1) * limit;
-      const [count, records] = await Promise.all([
-        prisma.promotion.count({ where }),
-        prisma.promotion.findMany({ ...baseQuery, skip, take: limit })
-      ]);
-
-      const results = records.map((promo) => ({
-        id: promo.id,
-        name: promo.name,
-        type: toApiPromotionType(promo.type),
-        endTime:
-          promo.endTime instanceof Date
-            ? promo.endTime.toISOString()
-            : promo.endTime
-            ? new Date(promo.endTime).toISOString()
-            : null,
-        minSpending: promo.minSpending ?? null,
-        rate: promo.rate ?? null,
-        points: promo.points ?? null
-      }));
-
-      return res.json({ count, results });
-    }
-
-   
     let promotions = await prisma.promotion.findMany(baseQuery);
 
     const userId = getCurrentUserId(req);
