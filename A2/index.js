@@ -2464,6 +2464,407 @@ app.patch("/suspicious/:userId", async (req, res) => {
 });
 
 
+
+async function canEditEvent(req, event) {
+  const rank = await resolveEffectiveRank(req);
+  const uid = getCurrentUserId(req);
+
+  if (!rank && !uid) return { allowed: false, rank: undefined, uid: null };
+
+  // Manager or higher → always allowed
+  if (rank !== undefined && rank >= ROLE_RANK.manager) {
+    return { allowed: true, rank, uid };
+  }
+
+  if (!uid) return { allowed: false, rank, uid: null };
+
+  // Organizer for this event → allowed (with restrictions enforced later)
+  const isOrganizer = event.organizers.some((o) => o.userId === uid);
+  return { allowed: isOrganizer, rank, uid };
+}
+
+// POST /events
+// Create a new point-earning event.
+// Clearance: Manager or higher
+app.post("/events", needManager, async (req, res) => {
+  try {
+    const {
+      name,
+      description,
+      location,
+      startTime,
+      endTime,
+      capacity,
+      points
+    } = req.body || {};
+
+    // --- Validate required strings ---
+    if (typeof name !== "string" || name.trim() === "") {
+      return res.status(400).json({ error: "bad name" });
+    }
+    if (typeof description !== "string" || description.trim() === "") {
+      return res.status(400).json({ error: "bad description" });
+    }
+    if (typeof location !== "string" || location.trim() === "") {
+      return res.status(400).json({ error: "bad location" });
+    }
+
+    // --- Validate times ---
+    if (typeof startTime !== "string") {
+      return res.status(400).json({ error: "bad startTime" });
+    }
+    if (typeof endTime !== "string") {
+      return res.status(400).json({ error: "bad endTime" });
+    }
+
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+
+    if (Number.isNaN(start.getTime())) {
+      return res.status(400).json({ error: "bad startTime" });
+    }
+    if (Number.isNaN(end.getTime())) {
+      return res.status(400).json({ error: "bad endTime" });
+    }
+    if (end <= start) {
+      return res.status(400).json({ error: "endTime must be after startTime" });
+    }
+
+    // Reject start/end in the past (aligned with PATCH rules)
+    const now = new Date();
+    if (start < now || end < now) {
+      return res.status(400).json({ error: "time in past" });
+    }
+
+    // --- Validate capacity ---
+    let cap = null;
+    if (capacity !== undefined && capacity !== null) {
+      const n = Number(capacity);
+      if (!Number.isInteger(n) || n <= 0) {
+        return res.status(400).json({ error: "bad capacity" });
+      }
+      cap = n;
+    }
+
+    // --- Validate points ---
+    const pts = Number(points);
+    if (!Number.isInteger(pts) || pts <= 0) {
+      return res.status(400).json({ error: "bad points" });
+    }
+
+    const event = await prisma.event.create({
+      data: {
+        name: name.trim(),
+        description: description.trim(),
+        location: location.trim(),
+        startTime: start,
+        endTime: end,
+        capacity: cap,
+        pointsTotal: pts,
+        pointsRemain: pts,
+        pointsAwarded: 0,
+        published: false
+      },
+      include: {
+        organizers: { select: { userId: true } },
+        guests: { select: { userId: true } }
+      }
+    });
+
+    return res.status(201).json({
+      id: event.id,
+      name: event.name,
+      description: event.description,
+      location: event.location,
+      startTime: event.startTime.toISOString(),
+      endTime: event.endTime.toISOString(),
+      capacity: event.capacity === null ? null : event.capacity,
+      pointsRemain: event.pointsRemain,
+      pointsAwarded: event.pointsAwarded,
+      published: !!event.published,
+      organizers: event.organizers.map((o) => o.userId),
+      guests: event.guests.map((g) => g.userId)
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+// PATCH /events/:eventId
+// Update an existing event.
+// Clearance: Manager+ OR organizer for this event.
+// Field rules & error conditions per spec.
+app.patch("/events/:eventId", async (req, res) => {
+  try {
+    const eventId = parseIdParam(req.params.eventId);
+    if (eventId === null) {
+      return res.status(400).json({ error: "bad event id" });
+    }
+
+    // Load event with organizers & guests (for auth, capacity, points)
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        organizers: { select: { userId: true } },
+        guests: { select: { userId: true, confirmed: true } }
+      }
+    });
+
+    if (!event) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    const { allowed, rank, uid } = await canEditEvent(req, event);
+    if (!allowed) {
+      if (rank === undefined && !uid) {
+        return res.status(401).json({ error: "unauthorized" });
+      }
+      return res.status(403).json({ error: "forbidden" });
+    }
+
+    const payload = req.body || {};
+    const wants = {
+      name: payload.name !== undefined,
+      description: payload.description !== undefined,
+      location: payload.location !== undefined,
+      startTime: payload.startTime !== undefined,
+      endTime: payload.endTime !== undefined,
+      capacity: payload.capacity !== undefined,
+      points: payload.points !== undefined,
+      published: payload.published !== undefined
+    };
+
+    if (!Object.values(wants).some(Boolean)) {
+      return res.status(400).json({ error: "no updates" });
+    }
+
+    const now = new Date();
+    const originalStart = event.startTime;
+    const originalEnd = event.endTime;
+
+    const data = {};
+    const updatedFields = new Set();
+
+    let newStart = event.startTime;
+    let newEnd = event.endTime;
+
+    // --- Helpers for "no changes after started/ended" rules ---
+    const hasStarted = originalStart <= now;
+    const hasEnded = originalEnd <= now;
+
+    // 1) name
+    if (wants.name) {
+      if (hasStarted) {
+        return res.status(400).json({ error: "cannot update name after start" });
+      }
+      if (typeof payload.name !== "string" || payload.name.trim() === "") {
+        return res.status(400).json({ error: "bad name" });
+      }
+      data.name = payload.name.trim();
+      updatedFields.add("name");
+    }
+
+    // 2) description
+    if (wants.description) {
+      if (hasStarted) {
+        return res.status(400).json({ error: "cannot update description after start" });
+      }
+      if (payload.description === null || payload.description === undefined) {
+        data.description = null;
+      } else if (typeof payload.description !== "string") {
+        return res.status(400).json({ error: "bad description" });
+      } else {
+        data.description = payload.description.trim();
+      }
+      updatedFields.add("description");
+    }
+
+    // 3) location
+    if (wants.location) {
+      if (hasStarted) {
+        return res.status(400).json({ error: "cannot update location after start" });
+      }
+      if (typeof payload.location !== "string" || payload.location.trim() === "") {
+        return res.status(400).json({ error: "bad location" });
+      }
+      data.location = payload.location.trim();
+      updatedFields.add("location");
+    }
+
+    // 4) startTime
+    if (wants.startTime) {
+      if (hasStarted) {
+        return res.status(400).json({ error: "cannot update startTime after start" });
+      }
+      if (typeof payload.startTime !== "string") {
+        return res.status(400).json({ error: "bad startTime" });
+      }
+      const s = new Date(payload.startTime);
+      if (Number.isNaN(s.getTime())) {
+        return res.status(400).json({ error: "bad startTime" });
+      }
+      if (s < now) {
+        return res.status(400).json({ error: "startTime in past" });
+      }
+      newStart = s;
+      data.startTime = s;
+      updatedFields.add("startTime");
+    }
+
+    // 5) endTime
+    if (wants.endTime) {
+      if (hasEnded) {
+        return res.status(400).json({ error: "cannot update endTime after end" });
+      }
+      if (typeof payload.endTime !== "string") {
+        return res.status(400).json({ error: "bad endTime" });
+      }
+      const e = new Date(payload.endTime);
+      if (Number.isNaN(e.getTime())) {
+        return res.status(400).json({ error: "bad endTime" });
+      }
+      if (e < now) {
+        return res.status(400).json({ error: "endTime in past" });
+      }
+      newEnd = e;
+      data.endTime = e;
+      updatedFields.add("endTime");
+    }
+
+    // Ensure new endTime is after new startTime
+    if (newEnd <= newStart) {
+      return res.status(400).json({ error: "endTime must be after startTime" });
+    }
+
+    // 6) capacity
+    if (wants.capacity) {
+      if (hasStarted) {
+        return res.status(400).json({ error: "cannot update capacity after start" });
+      }
+
+      let newCap = null;
+      if (payload.capacity === null) {
+        newCap = null;
+      } else {
+        const c = Number(payload.capacity);
+        if (!Number.isInteger(c) || c <= 0) {
+          return res.status(400).json({ error: "bad capacity" });
+        }
+        newCap = c;
+      }
+
+      // If reducing, ensure not below confirmed guests
+      if (newCap !== null && event.capacity !== null && newCap < event.capacity) {
+        const confirmedCount = event.guests.filter((g) => g.confirmed === true).length;
+        if (newCap < confirmedCount) {
+          return res.status(400).json({ error: "capacity below confirmed guests" });
+        }
+      }
+
+      data.capacity = newCap;
+      updatedFields.add("capacity");
+    }
+
+    // 7) points (only managers+; cannot reduce below awarded)
+    if (wants.points) {
+      if (rank === undefined || rank < ROLE_RANK.manager) {
+        return res.status(403).json({ error: "forbidden" });
+      }
+
+      const newTotal = Number(payload.points);
+      if (!Number.isInteger(newTotal) || newTotal <= 0) {
+        return res.status(400).json({ error: "bad points" });
+      }
+
+      // Already awarded points cannot be taken back
+      if (newTotal < event.pointsAwarded) {
+        return res.status(400).json({ error: "points below awarded" });
+      }
+
+      data.pointsTotal = newTotal;
+      data.pointsRemain = newTotal - event.pointsAwarded;
+      updatedFields.add("points");
+      updatedFields.add("pointsRemain");
+    }
+
+    // 8) published (only managers+; can only set to true)
+    if (wants.published) {
+      if (rank === undefined || rank < ROLE_RANK.manager) {
+        return res.status(403).json({ error: "forbidden" });
+      }
+
+      const v = payload.published;
+      if (v !== true) {
+        // Spec: can only be set to true
+        return res.status(400).json({ error: "bad published" });
+      }
+
+      if (!event.published) {
+        data.published = true;
+        updatedFields.add("published");
+      }
+      // If already true, silently ignore (no-op)
+    }
+
+    // If somehow nothing is valid to update:
+    if (Object.keys(data).length === 0 && updatedFields.size === 0) {
+      return res.status(400).json({ error: "no valid updates" });
+    }
+
+    const updated = await prisma.event.update({
+      where: { id: eventId },
+      data,
+      select: {
+        id: true,
+        name: true,
+        location: true,
+        description: true,
+        startTime: true,
+        endTime: true,
+        capacity: true,
+        pointsTotal: true,
+        pointsRemain: true,
+        pointsAwarded: true,
+        published: true
+      }
+    });
+
+    // Response: always id, name, location; plus only updated fields
+    const resp = {
+      id: updated.id,
+      name: updated.name,
+      location: updated.location
+    };
+
+    if (updatedFields.has("description")) {
+      resp.description = updated.description;
+    }
+    if (updatedFields.has("startTime")) {
+      resp.startTime = updated.startTime.toISOString();
+    }
+    if (updatedFields.has("endTime")) {
+      resp.endTime = updated.endTime.toISOString();
+    }
+    if (updatedFields.has("capacity")) {
+      resp.capacity = updated.capacity === null ? null : updated.capacity;
+    }
+    if (updatedFields.has("points") || updatedFields.has("pointsRemain")) {
+      // Only include if points were updated
+      resp.pointsRemain = updated.pointsRemain;
+      resp.pointsAwarded = updated.pointsAwarded;
+    }
+    if (updatedFields.has("published")) {
+      resp.published = !!updated.published;
+    }
+
+    return res.json(resp);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
 const server = app.listen(port, () => {
     console.log(`Server running on port ${port}`);
 });
