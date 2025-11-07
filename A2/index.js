@@ -1524,8 +1524,8 @@ app.get("/promotions/:promotionId", requireClearance("regular"), async (req, res
 
 app.delete("/promotions/:promotionId", needManager, async (req, res) => {
   try {
-    const promotionId = Number.parseInt(req.params.promotionId, 10);
-    if (!Number.isInteger(promotionId) || promotionId <= 0) {
+    const promotionId = parseIdParam(req.params.promotionId);
+    if (promotionId === null) {
       return res.status(400).json({ error: "bad promotion id" });
     }
 
@@ -1533,9 +1533,7 @@ app.delete("/promotions/:promotionId", needManager, async (req, res) => {
       where: { id: promotionId },
       select: {
         id: true,
-        _count: {
-          select: { assignments: true, TransactionPromotion: true }
-        }
+        startTime: true
       }
     });
 
@@ -1543,11 +1541,16 @@ app.delete("/promotions/:promotionId", needManager, async (req, res) => {
       return res.status(404).json({ error: "not found" });
     }
 
-    if (promotion._count.assignments > 0 || promotion._count.TransactionPromotion > 0) {
+    const now = new Date();
+    if (promotion.startTime && promotion.startTime <= now) {
+      // Spec: 403 if promotion has already started
       return res.status(403).json({ error: "promotion already started" });
     }
 
-    await prisma.promotion.delete({ where: { id: promotionId } });
+    await prisma.promotion.delete({
+      where: { id: promotionId }
+    });
+
     return res.sendStatus(204);
   } catch (e) {
     console.error(e);
