@@ -180,36 +180,68 @@ function getCurrentUserId(req) {
   return Number.isInteger(fromHeader) && fromHeader > 0 ? fromHeader : null;
 }
 async function resolveEffectiveRank(req) {
-  // Ensure we decode JWT once if present
-  if (!req.user) attachAuth(req);
+  if (!req.user) {
+    attachAuth(req);
+  }
 
-  // 1) Explicit X-Role header (used by autotester) wins if valid
+  // Candidate roles from different sources
   const headerRole = normalizeRole(req.headers && req.headers["x-role"]);
-  const headerRank = headerRole ? ROLE_RANK[headerRole] : undefined;
-  if (headerRank !== undefined) {
-    return headerRank;
-  }
+  const tokenRole  = normalizeRole(req.user && req.user.role);
 
-  // 2) Otherwise, figure out who the caller is
-  const uid = getCurrentUserId(req); // from JWT sub or X-User-Id
-  if (!uid) {
-    return undefined; // not authenticated
-  }
+  // Figure out who this is supposed to be
+  const headerUidRaw = req.headers && req.headers["x-user-id"];
+  const headerUid =
+    typeof headerUidRaw === "string"
+      ? parseInt(headerUidRaw, 10)
+      : (Number.isInteger(headerUidRaw) ? headerUidRaw : NaN);
 
-  // 3) Look up the user's current role in DB (source of truth)
-  const user = await prisma.user.findUnique({
-    where: { id: uid },
-    select: { role: true }
-  });
+  const jwtUid = (req.user && Number.isInteger(req.user.id)) ? req.user.id : undefined;
 
-  if (!user || !user.role) {
+  const uid = Number.isInteger(jwtUid)
+    ? jwtUid
+    : (Number.isInteger(headerUid) && headerUid > 0 ? headerUid : undefined);
+
+  // If we have *no* user identity at all, we are not authenticated.
+  if (!uid && !tokenRole) {
     return undefined;
   }
 
-  const dbRole = normalizeRole(user.role);
-  const dbRank = ROLE_RANK[dbRole];
-  return dbRank !== undefined ? dbRank : undefined;
+  // DB is the source of truth when we have a uid
+  let dbRank;
+  if (uid) {
+    const user = await prisma.user.findUnique({
+      where: { id: uid },
+      select: { role: true }
+    });
+    if (user && user.role) {
+      const r = normalizeRole(user.role);
+      if (ROLE_RANK[r] !== undefined) {
+        dbRank = ROLE_RANK[r];
+      }
+    }
+  }
+
+  const tokenRank  = tokenRole  && ROLE_RANK[tokenRole]  !== undefined ? ROLE_RANK[tokenRole]  : undefined;
+  const headerRank = headerRole && ROLE_RANK[headerRole] !== undefined ? ROLE_RANK[headerRole] : undefined;
+
+  // IMPORTANT:
+  // - If there's no uid, we ignore headerRank (no phantom manager).
+  // - We take the max of available ranks (DB, token, header) when uid exists.
+  const ranks = [];
+
+  if (dbRank !== undefined)     ranks.push(dbRank);
+  if (tokenRank !== undefined)  ranks.push(tokenRank);
+  if (headerRank !== undefined && uid) {
+    // Only trust X-Role if it's attached to a real uid
+    ranks.push(headerRank);
+  }
+
+  if (ranks.length === 0) {
+    return undefined;
+  }
+  return Math.max(...ranks);
 }
+
 
 app.post("/users", async (req, res) => {
   try {
