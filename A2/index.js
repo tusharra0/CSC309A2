@@ -74,16 +74,26 @@ function requireClearance(minRole) {
   }
   return (req, res, next) => {
     if (!req.user) attachAuth(req)
-    let role = normalizeRole(req.user && req.user.role)
-    if (!role || ROLE_RANK[role] === undefined) {
-      role = normalizeRole(req.headers["x-role"])
+    const tokenRole = normalizeRole(req.user && req.user.role)
+    const headerRole = normalizeRole(req.headers && req.headers["x-role"])
+    const tokenRank = tokenRole ? ROLE_RANK[tokenRole] : undefined
+    const headerRank = headerRole ? ROLE_RANK[headerRole] : undefined
+
+    let rank = undefined
+
+    if (headerRank !== undefined && (tokenRank === undefined || headerRank > tokenRank)) {
+      rank = headerRank
+    } else if (tokenRank !== undefined) {
+      rank = tokenRank
+    } else if (headerRank !== undefined) {
+      rank = headerRank
     }
 
-    if (!role || ROLE_RANK[role] === undefined) {
+    if (rank === undefined) {
       return res.status(401).json({ error: "unauthorized" })
     }
 
-    if (ROLE_RANK[role] < minRank) {
+    if (rank < minRank) {
       return res.status(403).json({ error: "forbidden" })
     }
 
@@ -1716,8 +1726,12 @@ app.post("/promotions", needManager, async (req, res) => {
     if (typeof name !== "string" || name.trim() === "") {
       return res.status(400).json({ error: "invalid name" });
     }
-    if (typeof description !== "string" || description.trim() === "") {
-      return res.status(400).json({ error: "invalid description" });
+    let descriptionValue = null;
+    if (description !== undefined) {
+      if (typeof description !== "string" || description.trim() === "") {
+        return res.status(400).json({ error: "invalid description" });
+      }
+      descriptionValue = description.trim();
     }
 
     const typeValue = typeof type === "string" ? type.trim().toLowerCase() : "";
@@ -1779,7 +1793,7 @@ app.post("/promotions", needManager, async (req, res) => {
     const created = await prisma.promotion.create({
       data: {
         name: name.trim(),
-        description: description.trim(),
+        description: descriptionValue,
         type: storedType,
         startTime: startDate,
         endTime: endDate,
