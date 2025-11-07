@@ -449,6 +449,7 @@ app.post("/auth/tokens", async (req, res) => {
   }
 });
 
+
 app.patch("/users/me", requireAuthRegular, async (req, res) => {
   try {
     const uid = getCurrentUserId(req);
@@ -829,52 +830,55 @@ app.post("/auth/resets", async (req, res) => {
   }
 });
 
-
 app.post("/auth/resets/:resetToken", async (req, res) => {
   try {
     const { resetToken } = req.params;
     const { utorid, password } = req.body || {};
 
-    // Validate payload
+    // --- Validate payload ---
     if (
       typeof utorid !== "string" ||
       utorid.trim() === "" ||
-      !validUtorid(utorid.trim()) ||
       typeof password !== "string" ||
       password.trim() === ""
     ) {
       return res.status(400).json({ error: "bad payload" });
     }
-
     if (!PASSWORD_REGEX.test(password)) {
       return res.status(400).json({ error: "invalid password" });
     }
 
     const uid = utorid.trim().toLowerCase();
 
+    // --- Look up by resetToken ONLY ---
     const tokenUser = await prisma.user.findFirst({
       where: { resetToken },
       select: { id: true, utorid: true, expiresAt: true }
     });
 
-    // 404 if token doesn't exist OR doesn't belong to that utorid
-    if (!tokenUser || tokenUser.utorid !== uid) {
+    if (!tokenUser) {
       return res.status(404).json({ error: "not found" });
     }
 
+    // --- UTORID must match the token owner ---
+    if (tokenUser.utorid !== uid) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+
+    // --- Check expiration ---
     const now = new Date();
     if (!(tokenUser.expiresAt instanceof Date) || tokenUser.expiresAt <= now) {
       return res.status(410).json({ error: "token expired" });
     }
 
+    // --- Update password + clear token ---
     const hash = await bcrypt.hash(password, SALT_ROUNDS);
-
     await prisma.user.update({
       where: { id: tokenUser.id },
       data: {
         password: hash,
-        resetToken: null,
-        expiresAt: null
+        resetToken: "",
+        expiresAt: new Date(0) // expire immediately after use
       }
     });
 
@@ -884,6 +888,7 @@ app.post("/auth/resets/:resetToken", async (req, res) => {
     return res.status(500).json({ error: "internal" });
   }
 });
+
 
 
 app.post("/transactions", checkRole, async (req, res) => {
