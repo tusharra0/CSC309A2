@@ -1532,11 +1532,12 @@ app.get("/promotions/:promotionId", requireClearance("regular"), async (req, res
   }
 })
 
-app.delete("/promotions/:promotionId", needManager, async (req, res) => {
+app.delete("/promotions/:promotionId", async (req, res) => {
   try {
     const promotionId = parseIdParam(req.params.promotionId);
+    // Invalid id should behave like "not found" for this endpoint
     if (promotionId === null) {
-      return res.status(400).json({ error: "bad promotion id" });
+      return res.status(404).json({ error: "not found" });
     }
 
     const promotion = await prisma.promotion.findUnique({
@@ -1549,6 +1550,15 @@ app.delete("/promotions/:promotionId", needManager, async (req, res) => {
 
     if (!promotion) {
       return res.status(404).json({ error: "not found" });
+    }
+
+    // Auth AFTER we know which promotion we're talking about
+    const rank = await resolveEffectiveRank(req);
+    if (rank === undefined) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+    if (rank < ROLE_RANK.manager) {
+      return res.status(403).json({ error: "forbidden" });
     }
 
     const now = new Date();
@@ -1567,6 +1577,7 @@ app.delete("/promotions/:promotionId", needManager, async (req, res) => {
     return res.status(500).json({ error: "internal" });
   }
 });
+
 
 
 app.patch("/promotions/:promotionId", async (req, res) => {
