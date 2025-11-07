@@ -93,7 +93,6 @@ function requireClearance(minRole) {
 }
 
 
-
 function validUtorid(x){
   return /^[a-z0-9]{7,8}$/i.test(x)
 }
@@ -149,6 +148,8 @@ async function requireAuthRegular(req, res, next) {
   } catch (err) {
     console.error(err)
     return res.status(500).json({ error: "internal" })
+  }
+}
 
 function getCurrentUserId(req) {
   if (req.user && Number.isInteger(req.user.id)) return req.user.id;
