@@ -240,99 +240,106 @@ app.post("/users", async (req, res) => {
   }
 });
 
-app.get("/users", async (req, res) => {
+app.get("/users", requireClearance("manager"), async (req, res) => {
   try {
-    // -------- strict pagination validation (do this first for clear 400s) --------
     const q = req.query;
-    const rawPage  = q.page;
-    const rawLimit = q.limit;
 
-    const page  = toInt(rawPage,  undefined);
-    const limit = toInt(rawLimit, undefined);
+    // ---- pagination ----
+    const page = toInt(q.page, 1);
+    const limit = toInt(q.limit, 10);
 
-    if (rawPage  !== undefined && (!Number.isInteger(page)  || page  <= 0)) {
+    if (!Number.isInteger(page) || page <= 0) {
       return res.status(400).json({ error: "bad page" });
     }
-    if (rawLimit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
+    if (!Number.isInteger(limit) || limit <= 0) {
       return res.status(400).json({ error: "bad limit" });
     }
 
-    const pageNum  = page  ?? 1;
-    const limitNum = limit ?? 10;
-
-    // -------- auth: manager+ required (return 403 for unauth or low role) --------
-    if (!req.user) attachAuth(req);
-    const roleHeader = (req.headers["x-role"] || "").toString().trim().toLowerCase();
-    const role = (req.user?.role || roleHeader || "").toLowerCase();
-    if (!["manager", "superuser"].includes(role)) {
-      return res.status(403).json({ error: "forbidden" });
-    }
-
-    // -------- build filters (safe/narrow) --------
+    // ---- filters ----
     const where = {};
-    const name = q.name;
-    const roleFilter = q.role;
-    const verified = toBool(q.verified);
-    const activated = toBool(q.activated);
 
-    if (typeof name === "string" && name.trim().length > 0) {
-      const n = name.trim();
+    // name: filter by utorid OR name (case-insensitive)
+    if (typeof q.name === "string" && q.name.trim() !== "") {
+      const s = q.name.trim();
       where.OR = [
-        { utorid: { contains: n, mode: "insensitive" } },
-        { name:   { contains: n, mode: "insensitive" } }
+        { utorid: { contains: s, mode: "insensitive" } },
+        { name:   { contains: s, mode: "insensitive" } }
       ];
     }
 
-    if (typeof roleFilter === "string" && roleFilter.trim().length > 0) {
-      // only accept known roles to avoid Prisma enum errors
-      const rf = roleFilter.trim().toLowerCase();
-      if (!["regular","cashier","manager","superuser"].includes(rf)) {
+    // role: must be valid if provided
+    if (typeof q.role === "string" && q.role.trim() !== "") {
+      const r = q.role.trim().toLowerCase();
+      if (!["regular", "cashier", "manager", "superuser"].includes(r)) {
         return res.status(400).json({ error: "bad role" });
       }
-      where.role = rf;
+      where.role = r;
     }
 
-    if (verified !== undefined) {
-      where.verified = verified;
+    // verified: boolean filter
+    if (q.verified !== undefined) {
+      const v = toBool(q.verified);
+      if (v === undefined) {
+        return res.status(400).json({ error: "bad verified" });
+      }
+      where.verified = v;
     }
 
-    if (activated !== undefined) {
-      where.lastLogin = activated ? { not: null } : null;
+    // activated: whether user has ever logged in (lastLogin != null)
+    if (q.activated !== undefined) {
+      const a = toBool(q.activated);
+      if (a === undefined) {
+        return res.status(400).json({ error: "bad activated" });
+      }
+      where.lastLogin = a ? { not: null } : null;
     }
 
-    const skip = (pageNum - 1) * limitNum;
-    const take = limitNum;
+    const skip = (page - 1) * limit;
 
-    // -------- query + shape minimal fields (avoid nullable/date pitfalls) --------
-    const [total, users] = await Promise.all([
+    const [count, users] = await Promise.all([
       prisma.user.count({ where }),
       prisma.user.findMany({
         where,
         skip,
-        take,
-        orderBy: { createdAt: "desc" },
+        take: limit,
+        orderBy: { createdAt: "asc" },
         select: {
           id: true,
           utorid: true,
           name: true,
           email: true,
+          birthday: true,
           role: true,
-          verified: true
+          points: true,
+          createdAt: true,
+          lastLogin: true,
+          verified: true,
+          avatarUrl: true
         }
       })
     ]);
 
-    // Minimal output the grader can consume
     const results = users.map(u => ({
       id: u.id,
       utorid: u.utorid,
       name: u.name,
       email: u.email,
+      birthday: u.birthday
+        ? u.birthday.toISOString().slice(0, 10)
+        : null,
       role: u.role,
-      verified: u.verified
+      points: u.points,
+      createdAt: u.createdAt
+        ? u.createdAt.toISOString()
+        : null,
+      lastLogin: u.lastLogin
+        ? u.lastLogin.toISOString()
+        : null,
+      verified: u.verified,
+      avatarUrl: u.avatarUrl ?? null
     }));
 
-    return res.json({ count: total, results });
+    return res.status(200).json({ count, results });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: "server broke" });
