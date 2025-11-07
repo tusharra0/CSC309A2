@@ -47,6 +47,49 @@ function normalizeRole(role) {
   return String(role).trim().toLowerCase()
 }
 
+function getRequestRole(req) {
+  const tokenRole = normalizeRole(req.user && req.user.role);
+  const headerRole = normalizeRole(req.headers && req.headers["x-role"]);
+  return tokenRole || headerRole || "";
+}
+
+function ensureManager(req, res) {
+  if (!req.user) attachAuth(req);
+  const role = getRequestRole(req);
+
+  if (!role) {
+    res.status(401).json({ error: "unauthorized" });
+    return false;
+  }
+  if (!["manager", "superuser"].includes(role)) {
+    res.status(403).json({ error: "forbidden" });
+    return false;
+  }
+  return true;
+}
+
+function normalizePromotionTypeParam(type) {
+  if (type === undefined) return "";
+  if (typeof type !== "string") return null;
+  const t = type.trim().toLowerCase();
+  if (!t) return "";
+  if (t === "automatic") return "automatic";
+  if (t === "one-time" || t === "onetime") return "onetime";
+  return null;
+}
+
+function toApiPromotionType(dbType) {
+  return dbType === "onetime" ? "one-time" : dbType;
+}
+
+function isPromotionActive(promo, now = new Date()) {
+  const start = promo.startTime ? new Date(promo.startTime) : null;
+  const end = promo.endTime ? new Date(promo.endTime) : null;
+  if (start && now < start) return false;
+  if (end && now >= end) return false;
+  return true;
+}
+
 function normalizePromotionTypeParam(type) {
   if (type === undefined) return "";
   if (typeof type !== "string") return null; // invalid
@@ -1414,14 +1457,19 @@ app.get("/transactions", needManager, async (req, res) => {
 });
 
 
-app.get("/promotions/:promotionId", requireClearance("regular"), async (req, res) => {
-  const promotionId = parseIdParam(req.params.promotionId);
-  if (promotionId === null) {
-    // Treat invalid id as not found for this spec
-    return res.status(404).json({ error: "not found" });
-  }
-
+app.get("/promotions/:promotionId", async (req, res) => {
   try {
+    const promotionId = parseIdParam(req.params.promotionId);
+    if (promotionId === null) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    if (!req.user) attachAuth(req);
+    const role = getRequestRole(req);
+    if (!role) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+
     const promo = await prisma.promotion.findUnique({
       where: { id: promotionId },
       select: {
@@ -1441,13 +1489,11 @@ app.get("/promotions/:promotionId", requireClearance("regular"), async (req, res
       return res.status(404).json({ error: "not found" });
     }
 
-    const now = new Date();
-    if (!isPromotionActive(promo, now)) {
-      // inactive: not started or ended
+    if (!isPromotionActive(promo)) {
       return res.status(404).json({ error: "not found" });
     }
 
-    return res.status(200).json({
+    return res.json({
       id: promo.id,
       name: promo.name,
       description: promo.description ?? "",
@@ -1457,19 +1503,22 @@ app.get("/promotions/:promotionId", requireClearance("regular"), async (req, res
       rate: promo.rate ?? null,
       points: promo.points ?? null
     });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "internal" });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
 
-app.delete("/promotions/:promotionId", needManager, async (req, res) => {
+
+app.delete("/promotions/:promotionId", async (req, res) => {
   try {
     const promotionId = Number.parseInt(req.params.promotionId, 10);
     if (!Number.isInteger(promotionId) || promotionId <= 0) {
       return res.status(404).json({ error: "not found" });
     }
+
+    if (!ensureManager(req, res)) return;
 
     const promotion = await prisma.promotion.findUnique({
       where: { id: promotionId },
@@ -1486,7 +1535,6 @@ app.delete("/promotions/:promotionId", needManager, async (req, res) => {
     }
 
     if (promotion._count.assignments > 0 || promotion._count.TransactionPromotion > 0) {
-      // Has started / been used
       return res.status(403).json({ error: "promotion already started" });
     }
 
@@ -1500,12 +1548,14 @@ app.delete("/promotions/:promotionId", needManager, async (req, res) => {
 
 
 
+
 app.patch("/promotions/:promotionId", async (req, res) => {
   try {
     const promoId = parseInt(req.params.promotionId, 10);
     if (!Number.isInteger(promoId) || promoId <= 0) {
       return res.status(404).json({ error: "notfound" });
     }
+     if (!ensureManager(req, res)) return;
 
     const promotion = await prisma.promotion.findUnique({
       where: { id: promoId },
@@ -1709,8 +1759,10 @@ app.patch("/promotions/:promotionId", async (req, res) => {
   }
 });
 
-app.post("/promotions", needManager, async (req, res) => {
+app.post("/promotions", async (req, res) => {
   try {
+    if (!ensureManager(req, res)) return;
+
     const {
       name,
       description,
@@ -1722,25 +1774,25 @@ app.post("/promotions", needManager, async (req, res) => {
       points
     } = req.body || {};
 
-    // name (required)
+    // Required: name
     if (typeof name !== "string" || name.trim() === "") {
       return res.status(400).json({ error: "invalid name" });
     }
 
-    // description (required)
+    // Required: description
     if (typeof description !== "string" || description.trim() === "") {
       return res.status(400).json({ error: "invalid description" });
     }
     const descriptionValue = description.trim();
 
-    // type (required)
+    // Required: type
     const typeNorm = typeof type === "string" ? type.trim().toLowerCase() : "";
     let storedType;
     if (typeNorm === "automatic") storedType = "automatic";
     else if (typeNorm === "one-time" || typeNorm === "onetime") storedType = "onetime";
     else return res.status(400).json({ error: "invalid type" });
 
-    // startTime / endTime (required)
+    // Required: startTime, endTime
     if (typeof startTime !== "string" || startTime.trim() === "") {
       return res.status(400).json({ error: "invalid startTime" });
     }
@@ -1763,17 +1815,16 @@ app.post("/promotions", needManager, async (req, res) => {
       return res.status(400).json({ error: "endTime must be after startTime" });
     }
 
-    // minSpending (optional, positive number)
+    // Optional: minSpending (positive number)
     let minSpendValue = null;
     if (minSpending !== undefined) {
-      if (typeof minSpending !== "number" || !Number.isFinite(minSpending) ||
-          minSpending <= 0) {
+      if (typeof minSpending !== "number" || !Number.isFinite(minSpending) || minSpending <= 0) {
         return res.status(400).json({ error: "invalid minSpending" });
       }
       minSpendValue = minSpending;
     }
 
-    // rate (optional, positive number)
+    // Optional: rate (positive number)
     let rateValue = null;
     if (rate !== undefined) {
       if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0) {
@@ -1782,7 +1833,7 @@ app.post("/promotions", needManager, async (req, res) => {
       rateValue = rate;
     }
 
-    // points (optional, non-negative integer)
+    // Optional: points (non-negative integer)
     let pointsValue = null;
     if (points !== undefined) {
       if (typeof points !== "number" || !Number.isInteger(points) || points < 0) {
@@ -1811,9 +1862,9 @@ app.post("/promotions", needManager, async (req, res) => {
       type: toApiPromotionType(created.type),
       startTime: created.startTime.toISOString(),
       endTime: created.endTime.toISOString(),
-      minSpending: created.minSpending ?? 0,
-      rate: created.rate ?? 0,
-      points: created.points ?? 0
+      minSpending: created.minSpending ?? null,
+      rate: created.rate ?? null,
+      points: created.points ?? null
     });
   } catch (e) {
     console.error(e);
@@ -1824,10 +1875,10 @@ app.post("/promotions", needManager, async (req, res) => {
 
 
 
-app.get("/promotions", requireAuthRegular, async (req, res) => {
+
+app.get("/promotions", async (req, res) => {
   try {
     if (!req.user) attachAuth(req);
-
     const {
       name,
       type,
@@ -1837,14 +1888,13 @@ app.get("/promotions", requireAuthRegular, async (req, res) => {
       ended: rawEnded
     } = req.query || {};
 
-    // Determine rank using resolveEffectiveRank so x-user-id / x-role / JWT all work.
-    const rank = await resolveEffectiveRank(req);
-    if (rank === undefined) {
+    const role = getRequestRole(req);
+    if (!role) {
       return res.status(401).json({ error: "unauthorized" });
     }
-    const isManager = rank >= ROLE_RANK.manager;
+    const isManager = ["manager", "superuser"].includes(role);
 
-    // Pagination validation: if provided and invalid -> 400
+    // Pagination
     const page = toInt(rawPage, undefined);
     const limit = toInt(rawLimit, undefined);
     if (rawPage !== undefined && (!Number.isInteger(page) || page <= 0)) {
@@ -1863,7 +1913,6 @@ app.get("/promotions", requireAuthRegular, async (req, res) => {
     }
 
     const where = {};
-
     if (typeof name === "string" && name.trim()) {
       where.name = { contains: name.trim(), mode: "insensitive" };
     }
@@ -1873,25 +1922,33 @@ app.get("/promotions", requireAuthRegular, async (req, res) => {
 
     const now = new Date();
 
+    // -------- Manager / superuser path --------
     if (isManager) {
-      // started / ended filters only valid for manager+
-      const startedBool = rawStarted !== undefined ? toBool(rawStarted) : undefined;
-      const endedBool = rawEnded !== undefined ? toBool(rawEnded) : undefined;
+      const hasStarted = rawStarted !== undefined;
+      const hasEnded = rawEnded !== undefined;
 
-      if (startedBool !== undefined && endedBool !== undefined) {
-        return res.status(400).json({ error: "cannot filter both started and ended" });
+      if (hasStarted && hasEnded) {
+        return res.status(400).json({ error: "bad filter" });
       }
 
-      if (startedBool !== undefined) {
+      if (hasStarted) {
+        const startedBool = toBool(rawStarted);
+        if (startedBool === undefined) {
+          return res.status(400).json({ error: "bad started" });
+        }
         where.startTime = startedBool
-          ? { lte: now }  // started
-          : { gt: now };  // not started yet
+          ? { lte: now } // started
+          : { gt: now }; // not started
       }
 
-      if (endedBool !== undefined) {
+      if (hasEnded) {
+        const endedBool = toBool(rawEnded);
+        if (endedBool === undefined) {
+          return res.status(400).json({ error: "bad ended" });
+        }
         where.endTime = endedBool
-          ? { lte: now }  // already ended
-          : { gt: now };  // not ended
+          ? { lte: now } // ended
+          : { gt: now }; // not ended
       }
 
       const skip = (pageNum - 1) * limitNum;
@@ -1906,7 +1963,7 @@ app.get("/promotions", requireAuthRegular, async (req, res) => {
         })
       ]);
 
-      const results = records.map((promo) => ({
+      const results = records.map(promo => ({
         id: promo.id,
         name: promo.name,
         type: toApiPromotionType(promo.type),
@@ -1920,7 +1977,7 @@ app.get("/promotions", requireAuthRegular, async (req, res) => {
       return res.json({ count, results });
     }
 
-    // ----- Regular user path: only active & unused promotions -----
+    // -------- Regular path --------
     const userId = getCurrentUserId(req);
     if (!userId) {
       return res.status(401).json({ error: "unauthorized" });
@@ -1945,10 +2002,9 @@ app.get("/promotions", requireAuthRegular, async (req, res) => {
     const availableAssignmentIds = new Set(unusedAssignments.map(p => p.promotionId));
     const usedIds = new Set(usedPromos.map(p => p.promotionId));
 
-    const filtered = basePromos.filter((promo) => {
+    const filtered = basePromos.filter(promo => {
       if (!isPromotionActive(promo, now)) return false;
       if (usedIds.has(promo.id)) return false;
-
       if (promo.type === "onetime") {
         return availableAssignmentIds.has(promo.id);
       }
@@ -1957,9 +2013,9 @@ app.get("/promotions", requireAuthRegular, async (req, res) => {
 
     const count = filtered.length;
     const startIndex = (pageNum - 1) * limitNum;
-    const pageSlice = filtered.slice(startIndex, startIndex + limitNum);
+    const slice = filtered.slice(startIndex, startIndex + limitNum);
 
-    const results = pageSlice.map((promo) => ({
+    const results = slice.map(promo => ({
       id: promo.id,
       name: promo.name,
       type: toApiPromotionType(promo.type),
@@ -1975,6 +2031,7 @@ app.get("/promotions", requireAuthRegular, async (req, res) => {
     return res.status(500).json({ error: "internal" });
   }
 });
+
 
 
 
