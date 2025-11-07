@@ -871,7 +871,15 @@ app.post("/auth/resets", async (req, res) => {
     }
     const uid = utorid.trim().toLowerCase();
 
-    // --- Apply rate limit ONLY when we actually issue a token ---
+    const user = await prisma.user.findUnique({
+      where: { utorid: uid },
+      select: { id: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "not found" });
+    }
+
     const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
     const now = Date.now();
     const last = resetRateLimiter.get(ip) || 0;
@@ -879,27 +887,16 @@ app.post("/auth/resets", async (req, res) => {
       return res.status(429).json({ error: "too many requests" });
     }
 
-    // Prepare a token/expiry for response schema (always include in 202)
     const token = crypto.randomUUID();
     const expiresAtDate = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
-    const user = await prisma.user.findUnique({
-      where: { utorid: uid },
-      select: { id: true }
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { resetToken: token, expiresAt: expiresAtDate }
     });
 
-    if (user) {
-      // Persist token only if user exists
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { resetToken: token, expiresAt: expiresAtDate }
-      });
+    resetRateLimiter.set(ip, now);
 
-      // Mark a successful issue for rate limiting
-      resetRateLimiter.set(ip, now);
-    }
-
-    // Always return 202 with schema the grader expects
     return res.status(202).json({
       expiresAt: expiresAtDate.toISOString(),
       resetToken: token
@@ -909,13 +906,17 @@ app.post("/auth/resets", async (req, res) => {
     return res.status(500).json({ error: "internal" });
   }
 });
-
 app.post("/auth/resets/:resetToken", async (req, res) => {
   try {
     const { resetToken } = req.params;
     const { utorid, password } = req.body || {};
 
-    // --- Validate payload ---
+    // 🚨 Reject empty or invalid tokens immediately
+    if (typeof resetToken !== "string" || resetToken.trim() === "") {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    // Validate payload
     if (
       typeof utorid !== "string" ||
       utorid.trim() === "" ||
@@ -930,7 +931,6 @@ app.post("/auth/resets/:resetToken", async (req, res) => {
 
     const uid = utorid.trim().toLowerCase();
 
-    // --- Look up by resetToken ONLY ---
     const tokenUser = await prisma.user.findFirst({
       where: { resetToken },
       select: { id: true, utorid: true, expiresAt: true }
@@ -940,25 +940,22 @@ app.post("/auth/resets/:resetToken", async (req, res) => {
       return res.status(404).json({ error: "not found" });
     }
 
-    // --- UTORID must match the token owner ---
     if (tokenUser.utorid !== uid) {
       return res.status(401).json({ error: "unauthorized" });
     }
 
-    // --- Check expiration ---
     const now = new Date();
     if (!(tokenUser.expiresAt instanceof Date) || tokenUser.expiresAt <= now) {
       return res.status(410).json({ error: "token expired" });
     }
 
-    // --- Update password + clear token ---
     const hash = await bcrypt.hash(password, SALT_ROUNDS);
     await prisma.user.update({
       where: { id: tokenUser.id },
       data: {
         password: hash,
-        resetToken: "",
-        expiresAt: new Date(0) // expire immediately after use
+        resetToken: null, // 👈 set null, not empty string
+        expiresAt: new Date(0)
       }
     });
 
@@ -968,7 +965,6 @@ app.post("/auth/resets/:resetToken", async (req, res) => {
     return res.status(500).json({ error: "internal" });
   }
 });
-
 
 
 app.post("/transactions", checkRole, async (req, res) => {
