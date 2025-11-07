@@ -72,32 +72,23 @@ function requireClearance(minRole) {
   if (minRank === undefined) {
     throw new Error(`unknown role: ${minRole}`)
   }
-  return (req, res, next) => {
-    if (!req.user) attachAuth(req)
-    const tokenRole = normalizeRole(req.user && req.user.role)
-    const headerRole = normalizeRole(req.headers && req.headers["x-role"])
-    const tokenRank = tokenRole ? ROLE_RANK[tokenRole] : undefined
-    const headerRank = headerRole ? ROLE_RANK[headerRole] : undefined
+    return async (req, res, next) => {
+    try {
+      const rank = await resolveEffectiveRank(req)
 
-    let rank = undefined
+      if (rank === undefined) {
+        return res.status(401).json({ error: "unauthorized" })
+      }
 
-    if (headerRank !== undefined && (tokenRank === undefined || headerRank > tokenRank)) {
-      rank = headerRank
-    } else if (tokenRank !== undefined) {
-      rank = tokenRank
-    } else if (headerRank !== undefined) {
-      rank = headerRank
+      if (rank < minRank) {
+        return res.status(403).json({ error: "forbidden" })
+      }
+
+      return next()
+    } catch (err) {
+      console.error(err)
+      return res.status(500).json({ error: "internal" })
     }
-
-    if (rank === undefined) {
-      return res.status(401).json({ error: "unauthorized" })
-    }
-
-    if (rank < minRank) {
-      return res.status(403).json({ error: "forbidden" })
-    }
-
-    return next()
   }
 }
 
@@ -148,29 +139,58 @@ function toInt(v,def){
   return def
 }
 
-function requireAuthRegular(req, res, next) {
-  // Attach JWT user if present
-  if (!req.user) attachAuth(req);
-
-  // Accept role from JWT or fallback header
-  let role = normalizeRole(req.user && req.user.role);
-  if (!role || ROLE_RANK[role] === undefined) {
-    role = normalizeRole(req.headers["x-role"]);
-  }
-
-  // Must be at least a known role (regular/cashier/manager/superuser)
-  if (!role || ROLE_RANK[role] === undefined) {
-    return res.status(401).json({ error: "unauthorized" });
-  }
-
-  // All known roles are allowed for /users/me
-  return next();
-}
+async function requireAuthRegular(req, res, next) {
+  try {
+    const rank = await resolveEffectiveRank(req)
+    if (rank === undefined) {
+      return res.status(401).json({ error: "unauthorized" })
+    }
+    return next()
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: "internal" })
 
 function getCurrentUserId(req) {
   if (req.user && Number.isInteger(req.user.id)) return req.user.id;
   const fromHeader = parseInt(req.headers["x-user-id"], 10);
   return Number.isInteger(fromHeader) && fromHeader > 0 ? fromHeader : null;
+}
+async function resolveEffectiveRank(req) {
+  if (!req.user) attachAuth(req)
+
+  const tokenRole = normalizeRole(req.user && req.user.role)
+  const headerRole = normalizeRole(req.headers && req.headers["x-role"])
+  const tokenRank = tokenRole ? ROLE_RANK[tokenRole] : undefined
+  const headerRank = headerRole ? ROLE_RANK[headerRole] : undefined
+
+  if (headerRank !== undefined && (tokenRank === undefined || headerRank > tokenRank)) {
+    return headerRank
+  }
+
+  if (tokenRank !== undefined) {
+    return tokenRank
+  }
+
+  if (headerRank !== undefined) {
+    return headerRank
+  }
+
+  const uid = getCurrentUserId(req)
+  if (!uid) {
+    return undefined
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: uid },
+    select: { role: true }
+  })
+
+  if (!user) {
+    return undefined
+  }
+
+  const dbRole = normalizeRole(user.role)
+  return dbRole ? ROLE_RANK[dbRole] : undefined
 }
 
 
