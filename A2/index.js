@@ -147,13 +147,19 @@ function needManager(req, res, next) {
   return requireClearance("manager")(req, res, next);
 }
 
-function toBool(v){
-  if(v===undefined) return undefined
-  const s = String(v).toLowerCase()
-  if(s==="true") return true
-  if(s==="false") return false
-  return undefined
+function toBool(v) {
+  if (v === undefined || v === null) return undefined;
+
+  if (typeof v === "boolean") return v;
+
+  const s = String(v).trim().toLowerCase();
+
+  if (s === "true" || s === "1") return true;
+  if (s === "false" || s === "0") return false;
+
+  return undefined; // invalid -> treated as "no filter"
 }
+
 
 function toInt(v,def){
   const n = parseInt(v,10)
