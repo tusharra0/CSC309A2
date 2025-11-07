@@ -289,36 +289,27 @@ app.post("/users", async (req, res) => {
 });
 
 // Overwrite any previous /users/mock implementation with this one
-
 app.post("/users/mock", async (req, res) => {
   try {
-    // The autograder usually sends the full mock dataset in the request body.
-    // Support either:
-    //   [ { ...users } ]
-    // or
-    //   { users: [ { ...users } ] }
-    const payload = req.body || {};
-    const users =
-      Array.isArray(payload)
-        ? payload
-        : Array.isArray(payload.users)
-          ? payload.users
-          : null;
+    const payload = req.body ?? {};
 
-    if (!users) {
-      // If no dataset provided, safest deterministic behavior:
-      // do NOT append duplicates; just report success.
-      return res.sendStatus(200);
+    // Accept either:
+    //   [ { ...user }, ... ]
+    // or
+    //   { users: [ { ...user }, ... ] }
+    let users;
+    if (Array.isArray(payload)) {
+      users = payload;
+    } else if (Array.isArray(payload.users)) {
+      users = payload.users;
+    } else {
+      // If format is unexpected, treat as "no users" but STILL reset table
+      users = [];
     }
 
-    // Idempotency: clear out all existing users before seeding.
-    // This guarantees that after each /users/mock call,
-    // the DB matches exactly the provided dataset (no 44, 66, etc.).
+    // Always reset users so each call is authoritative.
     await prisma.user.deleteMany({});
 
-    // Insert exactly the provided mock users.
-    // Assumes the payload already includes properly formatted fields
-    // (utorid, name, email, role, password hash, etc.) as per the spec.
     if (users.length > 0) {
       await prisma.user.createMany({
         data: users.map(u => ({
@@ -333,7 +324,8 @@ app.post("/users/mock", async (req, res) => {
           createdAt: u.createdAt ? new Date(u.createdAt) : undefined,
           lastLogin: u.lastLogin ? new Date(u.lastLogin) : undefined
         })),
-        skipDuplicates: true // extra safety; shouldn't be needed after deleteMany
+        // Not strictly needed after deleteMany, but harmless:
+        skipDuplicates: true
       });
     }
 
@@ -343,6 +335,8 @@ app.post("/users/mock", async (req, res) => {
     return res.status(500).json({ error: "internal" });
   }
 });
+
+
 
 
 // ===============================
