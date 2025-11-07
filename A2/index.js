@@ -198,15 +198,27 @@ app.post("/users", async (req, res) => {
   }
 });
 
-app.get("/users", needManager, async (req,res)=>{
+app.get("/users", async (req,res)=>{
   try{
     const q = req.query
     const name = q.name
     const role = q.role
     const verified = toBool(q.verified)
     const activated = toBool(q.activated)
-    const page = toInt(q.page,1)
-    const limit = toInt(q.limit,10)
+
+    // strict validation: if provided and invalid -> 400
+    const rawPage  = q.page
+    const rawLimit = q.limit
+    const page  = toInt(rawPage, undefined)
+    const limit = toInt(rawLimit, undefined)
+    if (rawPage !== undefined  && (!Number.isInteger(page)  || page  <= 0)) {
+      return res.status(400).json({ error: "bad page" })
+    }
+    if (rawLimit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
+      return res.status(400).json({ error: "bad limit" })
+    }
+    const pageNum  = page  ?? 1
+    const limitNum = limit ?? 10
 
     const where = {}
 
@@ -214,7 +226,7 @@ app.get("/users", needManager, async (req,res)=>{
       const n = String(name).trim()
       where.OR = [
         { utorid: { contains:n, mode:"insensitive" } },
-        { name: { contains:n, mode:"insensitive" } }
+        { name:   { contains:n, mode:"insensitive" } }
       ]
     }
 
@@ -234,15 +246,15 @@ app.get("/users", needManager, async (req,res)=>{
       }
     }
 
-    const skip = (page-1)*limit
-    const take = limit
+    const skip = (pageNum-1)*limitNum
+    const take = limitNum
 
-    const total = await prisma.user.count({ where: where })
+    const total = await prisma.user.count({ where })
 
     const users = await prisma.user.findMany({
-      where: where,
-      skip: skip,
-      take: take,
+      where,
+      skip,
+      take,
       orderBy: { createdAt: "desc" },
       select: {
         id:true,
@@ -259,28 +271,26 @@ app.get("/users", needManager, async (req,res)=>{
       }
     })
 
-    const results = users.map(u=>{
-      return {
-        id:u.id,
-        utorid:u.utorid,
-        name:u.name,
-        email:u.email,
-        birthday:u.birthday ? u.birthday.toISOString().slice(0,10) : null,
-        role:u.role,
-        points:u.points,
-        createdAt:u.createdAt,
-        lastLogin:u.lastLogin,
-        verified:u.verified,
-        avatarUrl:u.avatarUrl
-      }
-    })
+    const results = users.map(u=>({
+      id:u.id,
+      utorid:u.utorid,
+      name:u.name,
+      email:u.email,
+      birthday:u.birthday ? u.birthday.toISOString().slice(0,10) : null,
+      role:u.role,
+      points:u.points,
+      createdAt:u.createdAt,
+      lastLogin:u.lastLogin,
+      verified:u.verified,
+      avatarUrl:u.avatarUrl
+    }))
 
-    res.json({count:total, results:results})
+    return res.json({count: total, results})
   }catch(e){
     console.error(e)
-    res.status(500).json({error:"server broke"})
+    return res.status(500).json({error:"server broke"})
   }
-});
+})
 
 app.get("/users/:userId", checkRole, async (req,res)=>{
   try{
