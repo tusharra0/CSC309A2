@@ -48,6 +48,8 @@ model User {
   promotions          UserPromotion[]
   transactions        Transaction[]        @relation("CustomerTransactions")
   createdTransactions Transaction[]        @relation("CreatedByTransactions")
+  eventOrganizer      EventOrganizer[]
+  eventGuest          EventGuest[]
 }
 
 model Promotion {
@@ -105,4 +107,37 @@ model TransactionPromotion {
   transactionId Int
   promotion     Promotion    @relation(fields: [promotionId], references: [id])
   promotionId   Int
+}
+
+model Event {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  startTime   DateTime
+  endTime     DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organizers  EventOrganizer[]
+  guests      EventGuest[]
+}
+
+model EventOrganizer {
+  id      Int   @id @default(autoincrement())
+  event   Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId Int
+  user    User  @relation(fields: [userId], references: [id])
+  userId  Int
+
+  @@unique([eventId, userId])
+}
+
+model EventGuest {
+  id      Int   @id @default(autoincrement())
+  event   Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId Int
+  user    User  @relation(fields: [userId], references: [id])
+  userId  Int
+
+  @@unique([eventId, userId])
 }
