@@ -231,12 +231,14 @@ exports.updateUserById = async (req, res) => {
       sanitizedUpdates.email = email;
     }
 
+   // --- FIXED: enforce verified must be true ---
     if (Object.prototype.hasOwnProperty.call(updates, 'verified') && updates.verified !== null) {
-      if (typeof updates.verified !== 'boolean') {
+      if (typeof updates.verified !== 'boolean' || updates.verified !== true) {
         return res.status(400).json({ message: 'Invalid verified flag.' });
       }
-      sanitizedUpdates.verified = updates.verified;
+      sanitizedUpdates.verified = true;
     }
+
 
     if (
       Object.prototype.hasOwnProperty.call(updates, 'suspicious') &&
@@ -262,7 +264,7 @@ exports.updateUserById = async (req, res) => {
 
     if (Object.keys(sanitizedUpdates).length === 0) {
       return res.status(400).json({
-        message: 'No fields provided for update'
+        message: 'No update fields provided'
       });
     }
 
