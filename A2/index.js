@@ -38,6 +38,7 @@ const userRoutes = require('./src/routes/userRoutes');
 const transactionsRoutes = require('./src/routes/transactionsRoutes');
 const eventsRoutes = require('./src/routes/eventsRoutes');
 
+
 app.use('/auth', authRoutes);
 app.use('/users', userRoutes);
 app.use('/transactions', transactionsRoutes);
