@@ -30,7 +30,6 @@ const SALT_ROUNDS = 10;
 const resetRateLimiter = new Map(); // ip -> lastTimestampMs
 const RESET_WINDOW_MS = 60 * 1000;
 
-
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
@@ -409,52 +408,46 @@ app.get("/users/:userId", checkRole, async (req,res)=>{
 
 app.post("/auth/tokens", async (req, res) => {
   try {
-    const { utorid, password } = req.body || {};
+    const rawUtorid   = typeof req.body?.utorid === "string"   ? req.body.utorid.trim()   : "";
+    const rawUsername = typeof req.body?.username === "string" ? req.body.username.trim() : "";
+    const rawEmail    = typeof req.body?.email === "string"    ? req.body.email.trim()    : "";
+    const rawPassword = typeof req.body?.password === "string" ? req.body.password.trim() : "";
 
-    // Validate payload
-    if (
-      typeof utorid !== "string" ||
-      utorid.trim() === "" ||
-      typeof password !== "string" ||
-      password.trim() === ""
-    ) {
+    if (!rawPassword || (!rawUtorid && !rawUsername && !rawEmail)) {
       return res.status(400).json({ error: "bad payload" });
     }
 
-    const uid = utorid.trim().toLowerCase();
+    const uid   = (rawUtorid || rawUsername).toLowerCase();
+    const email = rawEmail.toLowerCase();
 
-    const user = await prisma.user.findUnique({
-      where: { utorid: uid },
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          ...(uid   ? [{ utorid: uid }] : []),
+          ...(email ? [{ email }]       : []),
+        ]
+      },
       select: { id: true, utorid: true, role: true, password: true }
     });
 
-    if (!user || !user.password) {
-      return res.status(401).json({ error: "invalid credentials" });
-    }
+    if (!user || !user.password) return res.status(401).json({ error: "invalid credentials" });
 
-    const ok = await bcrypt.compare(password, user.password);
-    if (!ok) {
-      return res.status(401).json({ error: "invalid credentials" });
-    }
+    const ok = await bcrypt.compare(rawPassword, user.password);
+    if (!ok) return res.status(401).json({ error: "invalid credentials" });
 
     const expiresAtDate = new Date(Date.now() + TOKEN_TTL_SECONDS * 1000);
-
     const token = jwt.sign(
       { sub: user.id, role: user.role, utorid: user.utorid },
       JWT_SECRET,
       { expiresIn: TOKEN_TTL_SECONDS }
     );
 
-    return res.status(200).json({
-      token,
-      expiresAt: expiresAtDate.toISOString()
-    });
+    return res.json({ token, expiresAt: expiresAtDate.toISOString() });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: "internal" });
   }
 });
-
 
 app.patch("/users/me", requireAuthRegular, async (req, res) => {
   try {
@@ -787,8 +780,6 @@ app.patch("/users/me/password", requireAuthRegular, async (req, res) => {
   }
 });
 
-
-
 app.post("/auth/resets", async (req, res) => {
   try {
     const { utorid } = req.body || {};
@@ -841,8 +832,6 @@ app.post("/auth/resets", async (req, res) => {
     return res.status(500).json({ error: "internal" });
   }
 });
-
-
 app.post("/auth/resets/:resetToken", async (req, res) => {
   try {
     const { resetToken } = req.params;
@@ -897,7 +886,6 @@ app.post("/auth/resets/:resetToken", async (req, res) => {
     return res.status(500).json({ error: "internal" });
   }
 });
-
 
 
 app.post("/transactions", checkRole, async (req, res) => {
