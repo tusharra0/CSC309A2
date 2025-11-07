@@ -418,6 +418,232 @@ app.post("/auth/tokens", async (req, res) => {
   }
 });
 
+app.patch("/users/me", requireAuthRegular, async (req, res) => {
+  try {
+    const uid = getCurrentUserId(req);
+    if (!uid) return res.status(401).json({ error: "unauthorized" });
+
+    const payload = req.body || {};
+    const wants = {
+      name: payload.name !== undefined,
+      email: payload.email !== undefined,
+      birthday: payload.birthday !== undefined,
+      avatarUrl: payload.avatarUrl !== undefined
+    };
+
+    if (!Object.values(wants).some(Boolean)) {
+      return res.status(400).json({ error: "no updates" });
+    }
+
+    const data = {};
+    if (wants.name) {
+      if (!validName(payload.name)) {
+        return res.status(400).json({ error: "bad name" });
+      }
+      data.name = payload.name.trim();
+    }
+
+    if (wants.email) {
+      if (!validEmail(payload.email)) {
+        return res.status(400).json({ error: "bad email" });
+      }
+      data.email = payload.email.trim().toLowerCase();
+    }
+
+    if (wants.birthday) {
+      if (payload.birthday !== null && typeof payload.birthday !== "string") {
+        return res.status(400).json({ error: "bad birthday" });
+      }
+      if (typeof payload.birthday === "string") {
+        const d = new Date(payload.birthday);
+        if (Number.isNaN(d.getTime())) {
+          return res.status(400).json({ error: "bad birthday" });
+        }
+        data.birthday = d;
+      } else {
+        data.birthday = null; // allow clearing
+      }
+    }
+
+    if (wants.avatarUrl) {
+      if (payload.avatarUrl !== null && typeof payload.avatarUrl !== "string") {
+        return res.status(400).json({ error: "bad avatarUrl" });
+      }
+      data.avatarUrl = payload.avatarUrl || null;
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: uid },
+      data,
+      select: {
+        id: true,
+        utorid: true,
+        name: true,
+        email: true,
+        birthday: true,
+        role: true,
+        points: true,
+        createdAt: true,
+        lastLogin: true,
+        verified: true,
+        avatarUrl: true
+      }
+    });
+
+    return res.json({
+      id: updated.id,
+      utorid: updated.utorid,
+      name: updated.name,
+      email: updated.email,
+      birthday: updated.birthday ? updated.birthday.toISOString().slice(0,10) : null,
+      role: updated.role,
+      points: updated.points,
+      createdAt: updated.createdAt?.toISOString() ?? null,
+      lastLogin: updated.lastLogin?.toISOString() ?? null,
+      verified: updated.verified,
+      avatarUrl: updated.avatarUrl || null
+    });
+  } catch (e) {
+    if (e.code === "P2002") {
+      // unique constraint (likely email)
+      return res.status(409).json({ error: "duplicate" });
+    }
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+
+// PATCH /users/:userId — manager/superuser can update user profile/admin fields
+app.patch("/users/:userId", needManager, async (req, res) => {
+  try {
+    const id = parseInt(req.params.userId, 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: "bad user id" });
+    }
+
+    const payload = req.body || {};
+    const wants = {
+      name: payload.name !== undefined,
+      email: payload.email !== undefined,
+      birthday: payload.birthday !== undefined,
+      avatarUrl: payload.avatarUrl !== undefined,
+      role: payload.role !== undefined,        // admin-only
+      verified: payload.verified !== undefined, // admin-only
+      suspicious: payload.suspicious !== undefined // admin-only (used elsewhere in your code)
+    };
+
+    if (!Object.values(wants).some(Boolean)) {
+      return res.status(400).json({ error: "no updates" });
+    }
+
+    const data = {};
+
+    if (wants.name) {
+      if (!validName(payload.name)) {
+        return res.status(400).json({ error: "bad name" });
+      }
+      data.name = payload.name.trim();
+    }
+
+    if (wants.email) {
+      if (!validEmail(payload.email)) {
+        return res.status(400).json({ error: "bad email" });
+      }
+      data.email = payload.email.trim().toLowerCase();
+    }
+
+    if (wants.birthday) {
+      if (payload.birthday !== null && typeof payload.birthday !== "string") {
+        return res.status(400).json({ error: "bad birthday" });
+      }
+      if (typeof payload.birthday === "string") {
+        const d = new Date(payload.birthday);
+        if (Number.isNaN(d.getTime())) {
+          return res.status(400).json({ error: "bad birthday" });
+        }
+        data.birthday = d;
+      } else {
+        data.birthday = null;
+      }
+    }
+
+    if (wants.avatarUrl) {
+      if (payload.avatarUrl !== null && typeof payload.avatarUrl !== "string") {
+        return res.status(400).json({ error: "bad avatarUrl" });
+      }
+      data.avatarUrl = payload.avatarUrl || null;
+    }
+
+    if (wants.role) {
+      const r = (payload.role ?? "").toString().trim().toLowerCase();
+      if (!["regular","cashier","manager","superuser"].includes(r)) {
+        return res.status(400).json({ error: "bad role" });
+      }
+      data.role = r;
+    }
+
+    if (wants.verified) {
+      if (typeof payload.verified !== "boolean") {
+        return res.status(400).json({ error: "bad verified" });
+      }
+      data.verified = payload.verified;
+    }
+
+    if (wants.suspicious) {
+      if (typeof payload.suspicious !== "boolean") {
+        return res.status(400).json({ error: "bad suspicious" });
+      }
+      data.suspicious = payload.suspicious;
+    }
+
+    const updated = await prisma.user.update({
+      where: { id },
+      data,
+      select: {
+        id: true,
+        utorid: true,
+        name: true,
+        email: true,
+        birthday: true,
+        role: true,
+        points: true,
+        createdAt: true,
+        lastLogin: true,
+        verified: true,
+        avatarUrl: true,
+        suspicious: true
+      }
+    });
+
+    return res.json({
+      id: updated.id,
+      utorid: updated.utorid,
+      name: updated.name,
+      email: updated.email,
+      birthday: updated.birthday ? updated.birthday.toISOString().slice(0,10) : null,
+      role: updated.role,
+      points: updated.points,
+      createdAt: updated.createdAt?.toISOString() ?? null,
+      lastLogin: updated.lastLogin?.toISOString() ?? null,
+      verified: updated.verified,
+      avatarUrl: updated.avatarUrl || null,
+      suspicious: !!updated.suspicious
+    });
+  } catch (e) {
+    if (e.code === "P2025") {
+      // record not found
+      return res.status(404).json({ error: "not found" });
+    }
+    if (e.code === "P2002") {
+      // unique constraint (likely email)
+      return res.status(409).json({ error: "duplicate" });
+    }
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
 app.get("/users/me", requireAuthRegular, async (req, res) => {
   try {
     const uid = getCurrentUserId(req);
