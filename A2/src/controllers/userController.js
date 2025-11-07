@@ -338,16 +338,24 @@ exports.updateUserById = async (req, res) => {
 
     // Return only the updated fields plus id, utorid, name
     const response = {
-      id: updatedUser.id,
-      utorid: updatedUser.utorid,
-      name: updatedUser.name
-    };
+    id: updatedUser.id,
+    utorid: updatedUser.utorid,
+    name: updatedUser.name
+  };
 
-    // Add only the fields that were updated
-    if (updates.email !== undefined) response.email = updatedUser.email;
-    if (updates.verified !== undefined) response.verified = updatedUser.verified;
-    if (updates.suspicious !== undefined) response.suspicious = updatedUser.suspicious;
-    if (updates.role !== undefined) response.role = updatedUser.role;
+  // Add only the fields that were actually updated
+  if (Object.prototype.hasOwnProperty.call(sanitizedUpdates, 'email')) {
+    response.email = updatedUser.email;
+  }
+  if (Object.prototype.hasOwnProperty.call(sanitizedUpdates, 'verified')) {
+    response.verified = updatedUser.verified;
+  }
+  if (Object.prototype.hasOwnProperty.call(sanitizedUpdates, 'suspicious')) {
+    response.suspicious = updatedUser.suspicious;
+  }
+  if (Object.prototype.hasOwnProperty.call(sanitizedUpdates, 'role')) {
+    response.role = updatedUser.role;
+  }
 
     return res.status(200).json(response);
 
