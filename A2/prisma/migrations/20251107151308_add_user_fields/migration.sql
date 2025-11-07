@@ -3,7 +3,6 @@
 
   - You are about to drop the column `username` on the `User` table. All the data in the column will be lost.
   - Added the required column `email` to the `User` table without a default value. This is not possible if the table is not empty.
-  - Added the required column `name` to the `User` table without a default value. This is not possible if the table is not empty.
   - Added the required column `password` to the `User` table without a default value. This is not possible if the table is not empty.
   - Added the required column `utorid` to the `User` table without a default value. This is not possible if the table is not empty.
 
@@ -15,8 +14,16 @@ CREATE TABLE "new_User" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "utorid" TEXT NOT NULL,
     "email" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "password" TEXT NOT NULL
+    "name" TEXT,
+    "password" TEXT NOT NULL,
+    "role" TEXT NOT NULL DEFAULT 'regular',
+    "verified" BOOLEAN NOT NULL DEFAULT false,
+    "suspicious" BOOLEAN NOT NULL DEFAULT false,
+    "points" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "lastLogin" DATETIME,
+    "birthday" DATETIME,
+    "avatarUrl" TEXT
 );
 INSERT INTO "new_User" ("id") SELECT "id" FROM "User";
 DROP TABLE "User";

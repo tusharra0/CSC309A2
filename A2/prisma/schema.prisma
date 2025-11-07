@@ -16,10 +16,10 @@ enum RoleType {
 
 enum TransactionType {
   purchase
-  redemption
   adjustment
-  event
   transfer
+  redemption
+  event
 }
 
 enum PromotionType {
@@ -28,116 +28,157 @@ enum PromotionType {
 }
 
 model User {
-  id          Int       @id @default(autoincrement())
-  utorid      String    @unique
-  email       String    @unique
-  name        String
-  password    String
-  role        RoleType  @default(regular)
-  verified    Boolean   @default(false)
-  suspicious  Boolean   @default(false)
-  expiresAt   DateTime?
-  resetToken  String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  points      Int       @default(0)
-  birthday    DateTime?
-  lastLogin   DateTime?
-  avatarUrl   String?
+  id            Int           @id @default(autoincrement())
+  utorid        String        @unique
+  email         String        @unique
+  password      String?
+  name          String
+  role          RoleType      @default(regular)
+  verified      Boolean       @default(false)
+  activated     Boolean       @default(false)
+  suspicious    Boolean       @default(false)
+  points        Int           @default(0)
+  avatarUrl     String?
+  birthday      DateTime?
+  resetToken    String?
+  expiresAt     DateTime?
+  lastLogin     DateTime?
+  createdAt     DateTime      @default(now())
 
-  promotions          UserPromotion[]
-  transactions        Transaction[]        @relation("CustomerTransactions")
-  createdTransactions Transaction[]        @relation("CreatedByTransactions")
-  eventOrganizer      EventOrganizer[]
-  eventGuest          EventGuest[]
+  transactionsTarget    Transaction[]        @relation("TargetUserTransactions")
+  transactionsCreated   Transaction[]        @relation("CreatorTransactions")
+  transactionsProcessed Transaction[]        @relation("ProcessorTransactions")
+  transactionsSent      Transaction[]        @relation("SenderTransactions")
+  transactionsReceived  Transaction[]        @relation("RecipientTransactions")
+
+  createdPromotions Promotion[]      @relation("CreatedPromotions")
+  promotionUsages   PromotionUsage[]
+
+  createdEvents Event[]         @relation("CreatedEvents")
+  organizerLinks EventOrganizer[]
+  guestLinks     EventGuest[]
 }
 
 model Promotion {
-  id          Int        @id @default(autoincrement())
+  id          Int            @id @default(autoincrement())
   name        String
-  type        PromotionType
   description String?
-  startTime   DateTime?
-  endTime     DateTime?
+  type        PromotionType
   minSpending Float?
+  startTime   DateTime
+  endTime     DateTime
   rate        Float?
   points      Int?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  oneTime     Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
-  assignments UserPromotion[]
-  promos      TransactionPromotion[]
+  createdById Int
+  createdBy   User           @relation("CreatedPromotions", fields: [createdById], references: [id], onDelete: Cascade)
+
+  transactions TransactionPromotion[]
+  usages       PromotionUsage[]
 }
 
-model UserPromotion {
-  id          Int       @id @default(autoincrement())
-  user        User      @relation(fields: [userId], references: [id])
-  userId      Int
-  promotion   Promotion @relation(fields: [promotionId], references: [id])
+model PromotionUsage {
+  id          Int        @id @default(autoincrement())
   promotionId Int
-  used        Boolean   @default(false)
-  usedAt      DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  userId      Int
+  usedAt      DateTime   @default(now())
 
-  @@unique([userId, promotionId])
+  promotion Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([promotionId, userId])
 }
 
 model Transaction {
-  id          Int             @id @default(autoincrement())
-  type        TransactionType
-  spent       Float           @default(0)
-  earned      Int
-  remark      String          @default("")
-  suspicious  Boolean         @default(false)
-  relatedId   Int?
-  createdAt   DateTime        @default(now())
+  id           Int             @id @default(autoincrement())
+  type         TransactionType
+  pointsDelta  Int             @default(0)
+  spent        Float?
+  remark       String?
+  suspicious   Boolean         @default(false)
+  processed    Boolean         @default(false)
+  processedAt  DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
 
-  user        User            @relation("CustomerTransactions", fields: [userId], references: [id])
-  userId      Int
-  createdBy   User            @relation("CreatedByTransactions", fields: [createdById], references: [id])
-  createdById Int
+  userId      Int?
+  user        User?            @relation("TargetUserTransactions", fields: [userId], references: [id])
+  senderId    Int?
+  sender      User?            @relation("SenderTransactions", fields: [senderId], references: [id])
+  recipientId Int?
+  recipient   User?            @relation("RecipientTransactions", fields: [recipientId], references: [id])
+  createdById Int?
+  createdBy   User?            @relation("CreatorTransactions", fields: [createdById], references: [id])
+  processedById Int?
+  processedBy   User?          @relation("ProcessorTransactions", fields: [processedById], references: [id])
 
-  promos      TransactionPromotion[]
+  eventId Int?
+  event   Event?         @relation(fields: [eventId], references: [id])
+
+  relatedTransactionId Int?
+  relatedTransaction   Transaction?       @relation("TransactionRelation", fields: [relatedTransactionId], references: [id])
+  adjustments          Transaction[]      @relation("TransactionRelation")
+
+  promotions TransactionPromotion[]
 }
 
 model TransactionPromotion {
-  id            Int          @id @default(autoincrement())
-  transaction   Transaction  @relation(fields: [transactionId], references: [id])
   transactionId Int
-  promotion     Promotion    @relation(fields: [promotionId], references: [id])
   promotionId   Int
+  bonusPoints   Int      @default(0)
+  appliedAt     DateTime @default(now())
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  promotion   Promotion   @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+
+  @@id([transactionId, promotionId])
 }
 
 model Event {
-  id          Int      @id @default(autoincrement())
-  title       String
-  description String?
-  startTime   DateTime
-  endTime     DateTime
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           Int       @id @default(autoincrement())
+  name         String
+  description  String?
+  location     String
+  startTime    DateTime
+  endTime      DateTime
+  capacity     Int
+  pointsTotal  Int       @default(0)
+  pointsRemain Int       @default(0)
+  pointsAwarded Int      @default(0)
+  published    Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  organizers  EventOrganizer[]
-  guests      EventGuest[]
+  createdById Int
+  createdBy   User       @relation("CreatedEvents", fields: [createdById], references: [id], onDelete: Cascade)
+
+  organizers EventOrganizer[]
+  guests     EventGuest[]
+  transactions Transaction[]
 }
 
 model EventOrganizer {
-  id      Int   @id @default(autoincrement())
-  event   Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  eventId Int
-  user    User  @relation(fields: [userId], references: [id])
-  userId  Int
+  eventId    Int
+  userId     Int
+  assignedAt DateTime @default(now())
 
-  @@unique([eventId, userId])
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId])
 }
 
 model EventGuest {
-  id      Int   @id @default(autoincrement())
-  event   Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  eventId Int
-  user    User  @relation(fields: [userId], references: [id])
-  userId  Int
+  eventId   Int
+  userId    Int
+  joinedAt  DateTime @default(now())
+  removedAt DateTime?
 
-  @@unique([eventId, userId])
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId])
 }

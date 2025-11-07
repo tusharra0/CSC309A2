@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test:*)",
+      "Bash(nul)",
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(npx prisma:*)",
+      "Bash(cat:*)",
+      "Bash(\"c:\\Users\\pgmoh\\Downloads\\CSC309A2\\tests\\userPatch.test.js\")",
+      "Bash(npm uninstall:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

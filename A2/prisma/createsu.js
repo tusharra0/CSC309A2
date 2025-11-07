@@ -1,79 +1,66 @@
+#!/usr/bin/env node
+'use strict';
+
 /*
  * Complete this script so that it is able to add a superuser to the database
- * Usage example: 
- *   node prisma/createsu.js clive123 clive.su@mail.utoronto.ca SuperUser123!
+ * Usage example:
+ * node prisma/createsu.js <utorid> <email> <password>
  */
 
-const { PrismaClient, RoleType } = require("@prisma/client");
-const bcrypt = require("bcrypt");
+const { PrismaClient } = require('@prisma/client'); /// lets me tak to my sqlite database 
+const bcrypt = require('bcrypt'); // library for hasing passwords, always store hash in your db and never the real password
 
-const prisma = new PrismaClient();
-const args = process.argv.slice(2);
-
-if (args.length < 3) {
-  console.log("Usage: node prisma/createsu.js <utorid> <email> <password>");
-  process.exit(1);
-}
-
-const normalize = (value = "") => String(value).trim().toLowerCase();
-const utorid = normalize(args[0]);
-const email = normalize(args[1]);
-const password = args[2];
-
-const validUtorid = /^[a-z0-9]{7,8}$/i;
-const validEmail = /^[^@\s]+@(?:mail\.)?utoronto\.ca$/i;
-
-if (!utorid || !validUtorid.test(utorid)) {
-  console.error("error: provide a valid UTORid");
-  process.exit(1);
-}
-
-if (!email || !validEmail.test(email)) {
-  console.error("error: provide a valid @utoronto.ca email");
-  process.exit(1);
-}
-
-if (!password || password.trim().length === 0) {
-  console.error("error: password is required");
-  process.exit(1);
-}
+const prisma = new PrismaClient(); // creates a new prsiam client instance so you can use it for queries, opening a connection to your database
 
 async function main() {
-  const hashed = await bcrypt.hash(password, 10);
+  // Step 1. Parse command-line arguments
+  const args = process.argv.slice(2);
+  if (args.length !== 3) {
+    console.error("Usage: node prisma/createsu.js <utorid> <email> <password>");
+    process.exit(1);
+  }
 
-  const user = await prisma.user.upsert({
-    where: { utorid },
-    update: {
-      email,
-      name: utorid,
-      password: hashed,
-      role: RoleType.superuser,
-      verified: true,
-      suspicious: false,
-      resetToken: null,
-      expiresAt: null
-    },
-    create: {
+  const [utorid, email, password] = args;
+
+  // Step 2. Check if user already exists
+  const existingUser = await prisma.user.findUnique({ where: { utorid } });
+  if (existingUser) {
+    console.error(`❌ Error: User with utorid "${utorid}" already exists.`);
+    process.exit(1);
+  }
+
+  // Step 3. Hash the password
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  // Step 4. Create new superuser
+  const newUser = await prisma.user.create({
+    data: {
       utorid,
       email,
-      name: utorid,
-      password: hashed,
-      role: RoleType.superuser,
+      name: "Super User",
+      password: hashedPassword,
+      role: "superuser",
       verified: true,
       suspicious: false,
-      resetToken: null,
-      expiresAt: null
+      points: 0,
+      createdAt: new Date(),
     },
-    select: { id: true, utorid: true, email: true }
   });
 
-  console.log(`Superuser ${user.utorid} (${user.email}) is ready.`);
+  // Step 5. Print confirmation
+  console.log("Superuser created successfully!");
+  console.log({
+    id: newUser.id,
+    utorid: newUser.utorid,
+    email: newUser.email,
+    role: newUser.role,
+    verified: newUser.verified,
+  });
 }
 
 main()
   .catch((err) => {
-    console.error(err);
-    process.exitCode = 1;
+    console.error("Error creating superuser:", err);
   })
   .finally(async () => {
     await prisma.$disconnect();
