@@ -1477,10 +1477,266 @@ app.get("/transactions", needManager, async (req, res) => {
 });
 
 
+// ===============================
+// PROMOTIONS ENDPOINTS (FIXED)
+// ===============================
+
+// POST /promotions - Create promotion (manager+ only)
+app.post("/promotions", async (req, res) => {
+  try {
+    // ✅ FIX: Check authorization FIRST before validation
+    const rank = await resolveEffectiveRank(req);
+    if (rank === undefined) return res.status(401).json({ error: "unauthorized" });
+    if (rank < ROLE_RANK.manager) return res.status(403).json({ error: "forbidden" });
+
+    const {
+      name,
+      description,
+      type,
+      startTime,
+      endTime,
+      minSpending,
+      rate,
+      points
+    } = req.body || {};
+
+    if (typeof name !== "string" || name.trim() === "") {
+      return res.status(400).json({ error: "invalid name" });
+    }
+    let descriptionValue = null;
+    if (description !== undefined) {
+      if (typeof description !== "string" || description.trim() === "") {
+        return res.status(400).json({ error: "invalid description" });
+      }
+      descriptionValue = description.trim();
+    }
+
+    const typeValue = typeof type === "string" ? type.trim().toLowerCase() : "";
+    let storedType;
+    if (typeValue === "automatic") {
+      storedType = "automatic";
+    } else if (typeValue === "one-time" || typeValue === "onetime") {
+      storedType = "onetime";
+    } else {
+      return res.status(400).json({ error: "invalid type" });
+    }
+
+    if (typeof startTime !== "string" || startTime.trim() === "") {
+      return res.status(400).json({ error: "invalid startTime" });
+    }
+    if (typeof endTime !== "string" || endTime.trim() === "") {
+      return res.status(400).json({ error: "invalid endTime" });
+    }
+
+    const startDate = new Date(startTime);
+    const endDate = new Date(endTime);
+    if (!Number.isFinite(startDate.getTime())) {
+      return res.status(400).json({ error: "invalid startTime" });
+    }
+    if (!Number.isFinite(endDate.getTime())) {
+      return res.status(400).json({ error: "invalid endTime" });
+    }
+    if (startDate.getTime() < Date.now()) {
+      return res.status(400).json({ error: "startTime must not be in the past" });
+    }
+    if (endDate.getTime() <= startDate.getTime()) {
+      return res.status(400).json({ error: "endTime must be after startTime" });
+    }
+
+    let minSpendValue = null;
+    if (minSpending !== undefined) {
+      if (typeof minSpending !== "number" || !Number.isFinite(minSpending) || minSpending <= 0 || !Number.isInteger(minSpending)) {
+        return res.status(400).json({ error: "invalid minSpending" });
+      }
+      minSpendValue = minSpending;
+    }
+
+    let rateValue = null;
+    if (rate !== undefined) {
+      if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0) {
+        return res.status(400).json({ error: "invalid rate" });
+      }
+      rateValue = rate;
+    }
+
+    let pointsValue = null;
+    if (points !== undefined) {
+      if (typeof points !== "number" || !Number.isInteger(points) || points < 0) {
+        return res.status(400).json({ error: "invalid points" });
+      }
+      pointsValue = points;
+    }
+
+    const created = await prisma.promotion.create({
+      data: {
+        name: name.trim(),
+        description: descriptionValue,
+        type: storedType,
+        startTime: startDate,
+        endTime: endDate,
+        minSpending: minSpendValue,
+        rate: rateValue,
+        points: pointsValue
+      },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        type: true,
+        startTime: true,
+        endTime: true,
+        minSpending: true,
+        rate: true,
+        points: true
+      }
+    });
+
+    return res.status(201).json({
+      id: created.id,
+      name: created.name,
+      description: created.description,
+      type: created.type === "onetime" ? "one-time" : created.type,
+      startTime: created.startTime.toISOString(),
+      endTime: created.endTime.toISOString(),
+      minSpending: created.minSpending ?? null,
+      rate: created.rate ?? null,
+      points: created.points ?? null
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+// GET /promotions - List promotions with filtering
+app.get("/promotions", requireAuthRegular, async (req, res) => {
+  try {
+    if (!req.user) attachAuth(req);
+
+    const role = (req.user?.role || "").toLowerCase();
+    const { name, type, page: pageParam, limit: limitParam } = req.query || {};
+
+    // ✅ FIX: Validate pagination parameters
+    const page = toInt(pageParam, 1);
+    const limit = toInt(limitParam, 10);
+    
+    if (pageParam !== undefined && (!Number.isInteger(page) || page <= 0)) {
+      return res.status(400).json({ error: "bad page" });
+    }
+    if (limitParam !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
+      return res.status(400).json({ error: "bad limit" });
+    }
+
+    const normalizedType = normalizePromotionTypeParam(type);
+    if (normalizedType === null) {
+      return res.status(400).json({ error: "bad type" });
+    }
+
+    const where = {};
+
+    if (typeof name === "string" && name.trim().length > 0) {
+      where.name = { contains: name.trim() };
+    }
+
+    if (normalizedType) {
+      where.type = normalizedType;
+    }
+
+    // ✅ FIX: Privileged users (manager+) see all promotions
+    if (role !== "regular") {
+      const skip = (page - 1) * limit;
+      const [count, records] = await Promise.all([
+        prisma.promotion.count({ where }),
+        prisma.promotion.findMany({ 
+          where,
+          skip, 
+          take: limit,
+          orderBy: { createdAt: "desc" }
+        })
+      ]);
+
+      const results = records.map((promo) => ({
+        id: promo.id,
+        name: promo.name,
+        type: toApiPromotionType(promo.type),
+        endTime: promo.endTime ? promo.endTime.toISOString() : null,
+        minSpending: promo.minSpending ?? null,
+        rate: promo.rate ?? null,
+        points: promo.points ?? null
+      }));
+
+      return res.json({ count, results });
+    }
+
+    // ✅ FIX: Regular users only see active, available promotions
+    const now = new Date();
+    const activeWhere = {
+      ...where,
+      startTime: { lte: now },
+      OR: [
+        { endTime: null },
+        { endTime: { gt: now } }
+      ]
+    };
+
+    const userId = getCurrentUserId(req);
+    if (!userId) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+
+    const [promotions, unusedAssignments, usedPromotions] = await Promise.all([
+      prisma.promotion.findMany({
+        where: activeWhere,
+        orderBy: { createdAt: "desc" }
+      }),
+      prisma.userPromotion.findMany({
+        where: { userId, used: false },
+        select: { promotionId: true }
+      }),
+      prisma.transactionPromotion.findMany({
+        where: { transaction: { userId } },
+        select: { promotionId: true }
+      })
+    ]);
+
+    const availableAssignmentIds = new Set(unusedAssignments.map((p) => p.promotionId));
+    const usedIds = new Set(usedPromotions.map((p) => p.promotionId));
+
+    const availablePromotions = promotions.filter((promo) => {
+      if (usedIds.has(promo.id)) return false;
+      if (promo.type === "onetime") {
+        return availableAssignmentIds.has(promo.id);
+      }
+      return true;
+    });
+
+    const count = availablePromotions.length;
+    const startIndex = (page - 1) * limit;
+    const paginated = availablePromotions.slice(startIndex, startIndex + limit);
+
+    const results = paginated.map((promo) => ({
+      id: promo.id,
+      name: promo.name,
+      type: toApiPromotionType(promo.type),
+      endTime: promo.endTime ? promo.endTime.toISOString() : null,
+      minSpending: promo.minSpending ?? null,
+      rate: promo.rate ?? null,
+      points: promo.points ?? null
+    }));
+
+    return res.json({ count, results });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+// GET /promotions/:promotionId - Get specific promotion
 app.get("/promotions/:promotionId", requireClearance("regular"), async (req, res) => {
-  const promotionId = parseIdParam(req.params.promotionId)
+  // ✅ FIX: Use consistent ID parsing
+  const promotionId = parseIdParam(req.params.promotionId);
   if (promotionId === null) {
-    return res.status(400).json({ error: "Invalid promotion id" })
+    return res.status(400).json({ error: "bad promotion id" });
   }
 
   try {
@@ -1497,78 +1753,53 @@ app.get("/promotions/:promotionId", requireClearance("regular"), async (req, res
         rate: true,
         points: true
       }
-    })
+    });
 
     if (!promotion) {
-      return res.status(404).json({ error: "Promotion not found" })
+      return res.status(404).json({ error: "Promotion not found" });
     }
 
-    const now = new Date()
-    const notStarted = promotion.startTime && promotion.startTime > now
-    const ended = promotion.endTime && promotion.endTime <= now
+    // ✅ FIX: Check if user is privileged (manager+) to see inactive promotions
+    const rank = await resolveEffectiveRank(req);
+    const isPrivileged = rank !== undefined && rank >= ROLE_RANK.manager;
+    
+    const now = new Date();
+    const notStarted = promotion.startTime && promotion.startTime > now;
+    const ended = promotion.endTime && promotion.endTime <= now;
 
-    if (notStarted || ended) {
-      return res.status(404).json({ error: "Promotion inactive" })
+    // Regular users can only see active promotions
+    if (!isPrivileged && (notStarted || ended)) {
+      return res.status(404).json({ error: "Promotion inactive" });
     }
 
     return res.json({
       id: promotion.id,
       name: promotion.name,
       description: promotion.description ?? null,
-      type: promotion.type,
+      type: promotion.type === "onetime" ? "one-time" : promotion.type,
       startTime: promotion.startTime ? promotion.startTime.toISOString() : null,
       endTime: promotion.endTime ? promotion.endTime.toISOString() : null,
       minSpending: promotion.minSpending ?? null,
       rate: promotion.rate ?? null,
       points: promotion.points ?? null
-    })
+    });
   } catch (err) {
-    console.error(`Failed to fetch promotion ${promotionId}`, err)
-    return res.status(500).json({ error: "Internal Server Error" })
-  }
-})
-
-app.delete("/promotions/:promotionId", needManager, async (req, res) => {
-  try {
-    const promotionId = parseIdParam(req.params.promotionId);
-    if (promotionId === null) {
-      return res.status(400).json({ error: "bad promotion id" });
-    }
-
-    const promotion = await prisma.promotion.findUnique({
-      where: { id: promotionId },
-      select: {
-        id: true,
-        startTime: true
-      }
-    });
-
-    if (!promotion) {
-      return res.status(404).json({ error: "not found" });
-    }
-
-    const now = new Date();
-    if (promotion.startTime && promotion.startTime <= now) {
-      // Spec: 403 if promotion has already started
-      return res.status(403).json({ error: "promotion already started" });
-    }
-
-    await prisma.promotion.delete({
-      where: { id: promotionId }
-    });
-
-    return res.sendStatus(204);
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: "internal" });
+    console.error(`Failed to fetch promotion ${promotionId}`, err);
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
-
+// PATCH /promotions/:promotionId - Update promotion (manager+ only)
 app.patch("/promotions/:promotionId", async (req, res) => {
   try {
-    const promoId = parseInt(req.params.promotionId, 10);
-    if (!Number.isInteger(promoId) || promoId <= 0) {
+    // ✅ FIX: Check authorization FIRST
+    const rank = await resolveEffectiveRank(req);
+    if (rank === undefined) return res.status(401).json({ error: "unauthorized" });
+    if (rank < ROLE_RANK.manager) return res.status(403).json({ error: "forbidden" });
+
+    // ✅ FIX: Use consistent ID parsing
+    const promoId = parseIdParam(req.params.promotionId);
+    if (promoId === null) {
       return res.status(400).json({ error: "bad promotion id" });
     }
 
@@ -1724,10 +1955,6 @@ app.patch("/promotions/:promotionId", async (req, res) => {
       return res.status(400).json({ error: "endTime must be after startTime" });
     }
 
-    const rank = await resolveEffectiveRank(req);
-    if (rank === undefined) return res.status(401).json({ error: "unauthorized" });
-    if (rank < ROLE_RANK.manager) return res.status(403).json({ error: "forbidden" });
-
     const updated = await prisma.promotion.update({
       where: { id: promoId },
       data,
@@ -1776,242 +2003,48 @@ app.patch("/promotions/:promotionId", async (req, res) => {
   }
 });
 
-app.post("/promotions", async (req, res) => {
+// DELETE /promotions/:promotionId - Delete promotion (manager+ only)
+app.delete("/promotions/:promotionId", async (req, res) => {
   try {
-    const {
-      name,
-      description,
-      type,
-      startTime,
-      endTime,
-      minSpending,
-      rate,
-      points
-    } = req.body || {};
-
-    if (typeof name !== "string" || name.trim() === "") {
-      return res.status(400).json({ error: "invalid name" });
-    }
-    let descriptionValue = null;
-    if (description !== undefined) {
-      if (typeof description !== "string" || description.trim() === "") {
-        return res.status(400).json({ error: "invalid description" });
-      }
-      descriptionValue = description.trim();
-    }
-
-    const typeValue = typeof type === "string" ? type.trim().toLowerCase() : "";
-    let storedType;
-    if (typeValue === "automatic") {
-      storedType = "automatic";
-    } else if (typeValue === "one-time" || typeValue === "onetime") {
-      storedType = "onetime";
-    } else {
-      return res.status(400).json({ error: "invalid type" });
-    }
-
-    if (typeof startTime !== "string" || startTime.trim() === "") {
-      return res.status(400).json({ error: "invalid startTime" });
-    }
-    if (typeof endTime !== "string" || endTime.trim() === "") {
-      return res.status(400).json({ error: "invalid endTime" });
-    }
-
-    const startDate = new Date(startTime);
-    const endDate = new Date(endTime);
-    if (!Number.isFinite(startDate.getTime())) {
-      return res.status(400).json({ error: "invalid startTime" });
-    }
-    if (!Number.isFinite(endDate.getTime())) {
-      return res.status(400).json({ error: "invalid endTime" });
-    }
-    if (startDate.getTime() < Date.now()) {
-      return res.status(400).json({ error: "startTime must not be in the past" });
-    }
-    if (endDate.getTime() <= startDate.getTime()) {
-      return res.status(400).json({ error: "endTime must be after startTime" });
-    }
-
-    let minSpendValue = null;
-    if (minSpending !== undefined) {
-      if (typeof minSpending !== "number" || !Number.isFinite(minSpending) || minSpending <= 0 || !Number.isInteger(minSpending)) {
-        return res.status(400).json({ error: "invalid minSpending" });
-      }
-      minSpendValue = minSpending;
-    }
-
-    let rateValue = null;
-    if (rate !== undefined) {
-      if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0) {
-        return res.status(400).json({ error: "invalid rate" });
-      }
-      rateValue = rate;
-    }
-
-    let pointsValue = null;
-    if (points !== undefined) {
-      if (typeof points !== "number" || !Number.isInteger(points) || points < 0) {
-        return res.status(400).json({ error: "invalid points" });
-      }
-      pointsValue = points;
-    }
+    // ✅ FIX: Check authorization FIRST  
     const rank = await resolveEffectiveRank(req);
     if (rank === undefined) return res.status(401).json({ error: "unauthorized" });
     if (rank < ROLE_RANK.manager) return res.status(403).json({ error: "forbidden" });
-    const created = await prisma.promotion.create({
-      data: {
-        name: name.trim(),
-        description: descriptionValue,
-        type: storedType,
-        startTime: startDate,
-        endTime: endDate,
-        minSpending: minSpendValue,
-        rate: rateValue,
-        points: pointsValue
-      },
+
+    // ✅ FIX: Use consistent ID parsing
+    const promotionId = parseIdParam(req.params.promotionId);
+    if (promotionId === null) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    const promotion = await prisma.promotion.findUnique({
+      where: { id: promotionId },
       select: {
         id: true,
-        name: true,
-        description: true,
-        type: true,
-        startTime: true,
-        endTime: true,
-        minSpending: true,
-        rate: true,
-        points: true
+        startTime: true
       }
     });
 
-    return res.status(201).json({
-      id: created.id,
-      name: created.name,
-      description: created.description,
-      type: created.type === "onetime" ? "one-time" : created.type,
-      startTime: created.startTime.toISOString(),
-      endTime: created.endTime.toISOString(),
-      minSpending: created.minSpending ?? null,
-      rate: created.rate ?? null,
-      points: created.points ?? null
-    });
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: "internal" });
-  }
-});
-
-
-
-app.get("/promotions", requireAuthRegular, async (req, res) => {
-  try {
-    if (!req.user) attachAuth(req);
-
-    const role = (req.user?.role || "").toLowerCase();
-    const { name, type, page: pageParam, limit: limitParam } = req.query || {};
-
-    const page = toInt(pageParam, 1);
-    const limit = toInt(limitParam, 10);
-
-    const normalizedType = normalizePromotionTypeParam(type);
-    if (normalizedType === null) {
-      return res.status(400).json({ error: "bad type" });
-    }
-
-    const where = {};
-
-    if (typeof name === "string" && name.trim().length > 0) {
-      where.name = { contains: name.trim() };
-    }
-
-    if (normalizedType) {
-      where.type = normalizedType;
-    }
-
-    const baseQuery = {
-      where,
-      orderBy: { createdAt: "desc" }
-    };
-
-    if (role !== "regular") {
-      const skip = (page - 1) * limit;
-      const [count, records] = await Promise.all([
-        prisma.promotion.count({ where }),
-        prisma.promotion.findMany({ ...baseQuery, skip, take: limit })
-      ]);
-
-      const results = records.map((promo) => ({
-        id: promo.id,
-        name: promo.name,
-        type: toApiPromotionType(promo.type),
-        endTime:
-          promo.endTime instanceof Date
-            ? promo.endTime.toISOString()
-            : promo.endTime
-            ? new Date(promo.endTime).toISOString()
-            : null,
-        minSpending: promo.minSpending ?? null,
-        rate: promo.rate ?? null,
-        points: promo.points ?? null
-      }));
-
-      return res.json({ count, results });
+    if (!promotion) {
+      return res.status(404).json({ error: "not found" });
     }
 
     const now = new Date();
-    let promotions = await prisma.promotion.findMany(baseQuery);
-
-    const userId = getCurrentUserId(req);
-    if (!userId) {
-      return res.status(401).json({ error: "unauthorized" });
+    if (promotion.startTime && promotion.startTime <= now) {
+      return res.status(403).json({ error: "promotion already started" });
     }
 
-    const [unusedAssignments, usedPromotions] = await Promise.all([
-      prisma.userPromotion.findMany({
-        where: { userId, used: false },
-        select: { promotionId: true }
-      }),
-      prisma.transactionPromotion.findMany({
-        where: { transaction: { userId } },
-        select: { promotionId: true }
-      })
-    ]);
-
-    const availableAssignmentIds = new Set(unusedAssignments.map((p) => p.promotionId));
-    const usedIds = new Set(usedPromotions.map((p) => p.promotionId));
-
-    promotions = promotions.filter((promo) => {
-      if (!isPromotionActive(promo, now)) return false;
-      if (usedIds.has(promo.id)) return false;
-      if (promo.type === "onetime") {
-        return availableAssignmentIds.has(promo.id);
-      }
-      return true;
+    await prisma.promotion.delete({
+      where: { id: promotionId }
     });
 
-    const count = promotions.length;
-    const startIndex = (page - 1) * limit;
-    const paginated = startIndex >= 0 ? promotions.slice(startIndex, startIndex + limit) : promotions.slice(0, limit);
-
-    const results = paginated.map((promo) => ({
-      id: promo.id,
-      name: promo.name,
-      type: toApiPromotionType(promo.type),
-      endTime:
-        promo.endTime instanceof Date
-          ? promo.endTime.toISOString()
-          : promo.endTime
-          ? new Date(promo.endTime).toISOString()
-          : null,
-      minSpending: promo.minSpending ?? null,
-      rate: promo.rate ?? null,
-      points: promo.points ?? null
-    }));
-
-    return res.json({ count, results });
+    return res.sendStatus(204);
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: "internal" });
   }
 });
+
 
 
 app.post("/users/mock", async (req, res) => {
@@ -2864,6 +2897,1215 @@ app.patch("/events/:eventId", async (req, res) => {
     return res.status(500).json({ error: "internal" });
   }
 });
+
+
+// GET /events
+// Regular+ can see only published events (no unpublished, no published filter).
+// Manager+ can see all events, with optional ?published= filter and extra fields.
+app.get("/events", requireAuthRegular, async (req, res) => {
+  try {
+    if (!req.user) attachAuth(req);
+    const rank = await resolveEffectiveRank(req);
+    if (rank === undefined) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+
+    const {
+      name,
+      location,
+      started,
+      ended,
+      showFull,
+      published,
+      page: pageParam,
+      limit: limitParam
+    } = req.query || {};
+
+    // --- parse booleans ---
+    const startedBool = started !== undefined ? toBool(started) : undefined;
+    const endedBool = ended !== undefined ? toBool(ended) : undefined;
+    const showFullBool = showFull !== undefined ? toBool(showFull) : false;
+    const publishedBool =
+      published !== undefined ? toBool(published) : undefined;
+
+    // validate booleans
+    if (started !== undefined && startedBool === undefined) {
+      return res.status(400).json({ error: "bad started" });
+    }
+    if (ended !== undefined && endedBool === undefined) {
+      return res.status(400).json({ error: "bad ended" });
+    }
+    if (showFull !== undefined && showFullBool === undefined) {
+      return res.status(400).json({ error: "bad showFull" });
+    }
+    if (published !== undefined && publishedBool === undefined) {
+      return res.status(400).json({ error: "bad published" });
+    }
+
+    // cannot specify both started and ended
+    if (startedBool !== undefined && endedBool !== undefined) {
+      return res.status(400).json({ error: "cannot specify both started and ended" });
+    }
+
+    // --- pagination ---
+    const page = toInt(pageParam, 1);
+    const limit = toInt(limitParam, 10);
+    if (!Number.isInteger(page) || page <= 0) {
+      return res.status(400).json({ error: "bad page" });
+    }
+    if (!Number.isInteger(limit) || limit <= 0) {
+      return res.status(400).json({ error: "bad limit" });
+    }
+
+    const now = new Date();
+
+    // --- base where clause ---
+    const where = {};
+
+    // name filter
+    if (typeof name === "string" && name.trim() !== "") {
+      where.name = { contains: name.trim(), mode: "insensitive" };
+    }
+
+    // location filter
+    if (typeof location === "string" && location.trim() !== "") {
+      where.location = { contains: location.trim(), mode: "insensitive" };
+    }
+
+    // started / ended filters
+    if (startedBool === true) {
+      // events that have started
+      where.startTime = { lte: now };
+    } else if (startedBool === false) {
+      // events that have NOT started
+      where.startTime = { gt: now };
+    }
+
+    if (endedBool === true) {
+      // events that have ended
+      where.endTime = { lte: now };
+    } else if (endedBool === false) {
+      // events that have NOT ended
+      where.endTime = { gt: now };
+    }
+
+    // published logic depends on role
+    const isManagerView = rank >= ROLE_RANK.manager;
+
+    if (isManagerView) {
+      // Manager+ can optionally filter by published
+      if (publishedBool !== undefined) {
+        where.published = publishedBool;
+      }
+      // else: see both published and unpublished
+    } else {
+      // Regular+: cannot see unpublished
+      where.published = true;
+    }
+
+    // --- fetch events with guests for numGuests / full check ---
+    const events = await prisma.event.findMany({
+      where,
+      orderBy: { startTime: "asc" },
+      include: {
+        guests: { select: { id: true } }
+      }
+    });
+
+    // --- apply showFull filter in-memory (needs numGuests / capacity) ---
+    const filtered = events.filter((ev) => {
+      const numGuests = ev.guests.length;
+      const isFull =
+        ev.capacity !== null &&
+        typeof ev.capacity === "number" &&
+        numGuests >= ev.capacity;
+
+      if (showFullBool) {
+        return true; // include everything
+      }
+      // default: hide full events
+      return !isFull;
+    });
+
+    const total = filtered.length;
+
+    // --- pagination after all filters ---
+    const startIndex = (page - 1) * limit;
+    const pageItems =
+      startIndex >= 0
+        ? filtered.slice(startIndex, startIndex + limit)
+        : filtered.slice(0, limit);
+
+    // --- build response objects ---
+    const results = pageItems.map((ev) => {
+      const numGuests = ev.guests.length;
+      const base = {
+        id: ev.id,
+        name: ev.name,
+        location: ev.location,
+        startTime: ev.startTime.toISOString(),
+        endTime: ev.endTime.toISOString(),
+        capacity: ev.capacity === null ? null : ev.capacity,
+        numGuests
+      };
+
+      if (isManagerView) {
+        // Manager+ variant: include extra fields
+        base.pointsRemain = ev.pointsRemain;
+        base.pointsAwarded = ev.pointsAwarded;
+        base.published = !!ev.published;
+      }
+
+      // description is intentionally omitted for both roles
+      return base;
+    });
+
+    return res.json({ count: total, results });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+// GET /events/:eventId
+// Regular or higher. Response shape depends on role / organizer status.
+app.get("/events/:eventId", requireAuthRegular, async (req, res) => {
+  try {
+    const eventId = parseIdParam(req.params.eventId);
+    if (eventId === null) {
+      return res.status(400).json({ error: "bad event id" });
+    }
+
+    if (!req.user) attachAuth(req);
+    const rank = await resolveEffectiveRank(req);
+    const uid = getCurrentUserId(req);
+
+    if (rank === undefined) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        organizers: {
+          select: {
+            userId: true,
+            user: { select: { id: true, utorid: true, name: true } }
+          }
+        },
+        guests: {
+          select: {
+            userId: true,
+            user: { select: { id: true, utorid: true, name: true } }
+          }
+        }
+      }
+    });
+
+    if (!event) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    const isManagerPlus = rank >= ROLE_RANK.manager;
+    const isOrganizer =
+      uid && event.organizers.some((o) => o.userId === uid);
+
+    // Regular users (non-manager, non-organizer) cannot see unpublished events
+    if (!event.published && !isManagerPlus && !isOrganizer) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    const numGuests = event.guests.length;
+
+    // Manager+ or organizer: full detail view
+    if (isManagerPlus || isOrganizer) {
+      return res.json({
+        id: event.id,
+        name: event.name,
+        description: event.description,
+        location: event.location,
+        startTime: event.startTime.toISOString(),
+        endTime: event.endTime.toISOString(),
+        capacity: event.capacity === null ? null : event.capacity,
+        pointsRemain: event.pointsRemain,
+        pointsAwarded: event.pointsAwarded,
+        published: !!event.published,
+        organizers: event.organizers.map((o) => ({
+          id: o.user.id,
+          utorid: o.user.utorid,
+          name: o.user.name
+        })),
+        guests: event.guests.map((g) => ({
+          id: g.user.id,
+          utorid: g.user.utorid,
+          name: g.user.name
+        }))
+      });
+    }
+
+    // Regular view (published event only): limited info
+    return res.json({
+      id: event.id,
+      name: event.name,
+      description: event.description,
+      location: event.location,
+      startTime: event.startTime.toISOString(),
+      endTime: event.endTime.toISOString(),
+      capacity: event.capacity === null ? null : event.capacity,
+      organizers: event.organizers.map((o) => ({
+        id: o.user.id,
+        utorid: o.user.utorid,
+        name: o.user.name
+      })),
+      numGuests
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+// POST /events/:eventId/organizers
+// Add an organizer to this event.
+// Clearance: Manager or higher
+app.post("/events/:eventId/organizers", needManager, async (req, res) => {
+  try {
+    const eventId = parseIdParam(req.params.eventId);
+    if (eventId === null) {
+      return res.status(400).json({ error: "bad event id" });
+    }
+
+    const { utorid } = req.body || {};
+    if (typeof utorid !== "string" || !validUtorid(utorid.trim())) {
+      return res.status(400).json({ error: "bad utorid" });
+    }
+    const normalizedUtorid = utorid.trim().toLowerCase();
+
+    // Load event with organizers + guests for checks
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        organizers: {
+          select: {
+            userId: true,
+            user: { select: { id: true, utorid: true, name: true } }
+          }
+        },
+        guests: {
+          select: {
+            userId: true
+          }
+        }
+      }
+    });
+
+    if (!event) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    // 410 Gone if the event has ended
+    const now = new Date();
+    if (event.endTime && event.endTime <= now) {
+      return res.status(410).json({ error: "event ended" });
+    }
+
+    // Organizer must exist as a user
+    const user = await prisma.user.findUnique({
+      where: { utorid: normalizedUtorid },
+      select: { id: true, utorid: true, name: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "user not found" });
+    }
+
+    // 400 if already registered as guest
+    const isGuest = event.guests.some(g => g.userId === user.id);
+    if (isGuest) {
+      return res.status(400).json({ error: "user is guest; remove first" });
+    }
+
+    // If already organizer, treat as idempotent: just return current state (200)
+    const alreadyOrganizer = event.organizers.some(o => o.userId === user.id);
+    if (!alreadyOrganizer) {
+      await prisma.eventOrganizer.create({
+        data: {
+          eventId: eventId,
+          userId: user.id
+        }
+      });
+    }
+
+    // Reload organizers for response
+    const updated = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        id: true,
+        name: true,
+        location: true,
+        organizers: {
+          select: {
+            user: { select: { id: true, utorid: true, name: true } }
+          }
+        }
+      }
+    });
+
+    const body = {
+      id: updated.id,
+      name: updated.name,
+      location: updated.location,
+      organizers: updated.organizers.map(o => ({
+        id: o.user.id,
+        utorid: o.user.utorid,
+        name: o.user.name
+      }))
+    };
+
+    // 201 if we just created; 200 if it already existed
+    return res.status(alreadyOrganizer ? 200 : 201).json(body);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+// DELETE /events/:eventId/organizers/:userId
+// Remove an organizer from this event.
+// Clearance: Manager or higher
+app.delete("/events/:eventId/organizers/:userId", needManager, async (req, res) => {
+  try {
+    const eventId = parseIdParam(req.params.eventId);
+    const userId = parseIdParam(req.params.userId);
+
+    if (eventId === null || userId === null) {
+      return res.status(400).json({ error: "bad id" });
+    }
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true }
+    });
+
+    if (!event) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    const organizer = await prisma.eventOrganizer.findUnique({
+      where: {
+        eventId_userId: {
+          eventId,
+          userId
+        }
+      }
+    });
+
+    if (!organizer) {
+      // Nothing to remove; treat as not found
+      return res.status(404).json({ error: "not found" });
+    }
+
+    await prisma.eventOrganizer.delete({
+      where: {
+        eventId_userId: {
+          eventId,
+          userId
+        }
+      }
+    });
+
+    return res.sendStatus(204);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+
+// POST /events/:eventId/guests
+// Add a guest to this event.
+// Clearance: Manager+ OR organizer for this event.
+// 400 if user is organizer
+// 404 if event not visible to organizer yet
+// 410 if full or ended
+app.post("/events/:eventId/guests", async (req, res) => {
+  try {
+    const eventId = parseIdParam(req.params.eventId);
+    if (eventId === null) {
+      return res.status(400).json({ error: "bad event id" });
+    }
+
+    const { utorid } = req.body || {};
+    if (typeof utorid !== "string" || !validUtorid(utorid.trim())) {
+      return res.status(400).json({ error: "bad utorid" });
+    }
+    const normalizedUtorid = utorid.trim().toLowerCase();
+
+    if (!req.user) attachAuth(req);
+    const rank = await resolveEffectiveRank(req);
+    const callerId = getCurrentUserId(req);
+
+    if (rank === undefined) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+
+    // Load event with organizers & guests for auth/visibility/capacity checks
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        organizers: {
+          select: { userId: true }
+        },
+        guests: {
+          select: { userId: true }
+        }
+      }
+    });
+
+    if (!event) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    const now = new Date();
+
+    // 410 if event has ended
+    if (event.endTime && event.endTime <= now) {
+      return res.status(410).json({ error: "event ended" });
+    }
+
+    const isManagerPlus = rank >= ROLE_RANK.manager;
+    const isOrganizerCaller =
+      callerId && event.organizers.some(o => o.userId === callerId);
+
+    // Authorization:
+    // - Manager+ always allowed
+    // - Organizer allowed only if event is visible (published); otherwise 404
+    if (!isManagerPlus) {
+      if (!isOrganizerCaller) {
+        return res.status(403).json({ error: "forbidden" });
+      }
+      if (!event.published) {
+        // Organizer cannot see/manage unpublished events -> pretend it doesn't exist
+        return res.status(404).json({ error: "not found" });
+      }
+    }
+
+    // Check capacity / full
+    const currentGuests = event.guests.length;
+    const isFull =
+      event.capacity !== null &&
+      typeof event.capacity === "number" &&
+      currentGuests >= event.capacity;
+
+    if (isFull) {
+      return res.status(410).json({ error: "event full" });
+    }
+
+    // Find target user
+    const user = await prisma.user.findUnique({
+      where: { utorid: normalizedUtorid },
+      select: { id: true, utorid: true, name: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "user not found" });
+    }
+
+    // 400 if user is an organizer
+    const isOrganizer = event.organizers.some(o => o.userId === user.id);
+    if (isOrganizer) {
+      return res.status(400).json({ error: "user is organizer; remove first" });
+    }
+
+    // If already guest, treat as idempotent:
+    const existingGuest = event.guests.find(g => g.userId === user.id);
+    let newNumGuests = currentGuests;
+
+    if (!existingGuest) {
+      // Re-check capacity before insert (race safety)
+      if (
+        event.capacity !== null &&
+        typeof event.capacity === "number" &&
+        currentGuests >= event.capacity
+      ) {
+        return res.status(410).json({ error: "event full" });
+      }
+
+      await prisma.eventGuest.create({
+        data: {
+          eventId,
+          userId: user.id
+        }
+      });
+      newNumGuests += 1;
+    }
+
+    return res.status(existingGuest ? 200 : 201).json({
+      id: event.id,
+      name: event.name,
+      location: event.location,
+      guestAdded: {
+        id: user.id,
+        utorid: user.utorid,
+        name: user.name
+      },
+      numGuests: newNumGuests
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+// DELETE /events/:eventId/organizers/:userId
+// Remove an organizer from this event.
+// Clearance: Manager or higher
+app.delete("/events/:eventId/organizers/:userId", needManager, async (req, res) => {
+  try {
+    const eventId = parseIdParam(req.params.eventId);
+    const userId = parseIdParam(req.params.userId);
+
+    if (eventId === null || userId === null) {
+      return res.status(400).json({ error: "bad id" });
+    }
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true }
+    });
+
+    if (!event) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    const organizer = await prisma.eventOrganizer.findUnique({
+      where: {
+        eventId_userId: {
+          eventId,
+          userId
+        }
+      }
+    });
+
+    if (!organizer) {
+      // Nothing to remove; treat as not found
+      return res.status(404).json({ error: "not found" });
+    }
+
+    await prisma.eventOrganizer.delete({
+      where: {
+        eventId_userId: {
+          eventId,
+          userId
+        }
+      }
+    });
+
+    return res.sendStatus(204);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+
+// POST /events/:eventId/guests
+// Add a guest to this event.
+// Clearance: Manager+ OR organizer for this event.
+// 400 if user is organizer
+// 404 if event not visible to organizer yet
+// 410 if full or ended
+app.post("/events/:eventId/guests", async (req, res) => {
+  try {
+    const eventId = parseIdParam(req.params.eventId);
+    if (eventId === null) {
+      return res.status(400).json({ error: "bad event id" });
+    }
+
+    const { utorid } = req.body || {};
+    if (typeof utorid !== "string" || !validUtorid(utorid.trim())) {
+      return res.status(400).json({ error: "bad utorid" });
+    }
+    const normalizedUtorid = utorid.trim().toLowerCase();
+
+    if (!req.user) attachAuth(req);
+    const rank = await resolveEffectiveRank(req);
+    const callerId = getCurrentUserId(req);
+
+    if (rank === undefined) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+
+    // Load event with organizers & guests for auth/visibility/capacity checks
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        organizers: {
+          select: { userId: true }
+        },
+        guests: {
+          select: { userId: true }
+        }
+      }
+    });
+
+    if (!event) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    const now = new Date();
+
+    // 410 if event has ended
+    if (event.endTime && event.endTime <= now) {
+      return res.status(410).json({ error: "event ended" });
+    }
+
+    const isManagerPlus = rank >= ROLE_RANK.manager;
+    const isOrganizerCaller =
+      callerId && event.organizers.some(o => o.userId === callerId);
+
+    // Authorization:
+    // - Manager+ always allowed
+    // - Organizer allowed only if event is visible (published); otherwise 404
+    if (!isManagerPlus) {
+      if (!isOrganizerCaller) {
+        return res.status(403).json({ error: "forbidden" });
+      }
+      if (!event.published) {
+        // Organizer cannot see/manage unpublished events -> pretend it doesn't exist
+        return res.status(404).json({ error: "not found" });
+      }
+    }
+
+    // Check capacity / full
+    const currentGuests = event.guests.length;
+    const isFull =
+      event.capacity !== null &&
+      typeof event.capacity === "number" &&
+      currentGuests >= event.capacity;
+
+    if (isFull) {
+      return res.status(410).json({ error: "event full" });
+    }
+
+    // Find target user
+    const user = await prisma.user.findUnique({
+      where: { utorid: normalizedUtorid },
+      select: { id: true, utorid: true, name: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "user not found" });
+    }
+
+    // 400 if user is an organizer
+    const isOrganizer = event.organizers.some(o => o.userId === user.id);
+    if (isOrganizer) {
+      return res.status(400).json({ error: "user is organizer; remove first" });
+    }
+
+    // If already guest, treat as idempotent:
+    const existingGuest = event.guests.find(g => g.userId === user.id);
+    let newNumGuests = currentGuests;
+
+    if (!existingGuest) {
+      // Re-check capacity before insert (race safety)
+      if (
+        event.capacity !== null &&
+        typeof event.capacity === "number" &&
+        currentGuests >= event.capacity
+      ) {
+        return res.status(410).json({ error: "event full" });
+      }
+
+      await prisma.eventGuest.create({
+        data: {
+          eventId,
+          userId: user.id
+        }
+      });
+      newNumGuests += 1;
+    }
+
+    return res.status(existingGuest ? 200 : 201).json({
+      id: event.id,
+      name: event.name,
+      location: event.location,
+      guestAdded: {
+        id: user.id,
+        utorid: user.utorid,
+        name: user.name
+      },
+      numGuests: newNumGuests
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+
+// DELETE /events/:eventId/guests/:userId
+// Remove a guest from this event.
+// Clearance: Manager or higher (organizers NOT allowed)
+app.delete("/events/:eventId/guests/:userId", needManager, async (req, res) => {
+  try {
+    const eventId = parseIdParam(req.params.eventId);
+    const userId = parseIdParam(req.params.userId);
+
+    if (eventId === null || userId === null) {
+      return res.status(400).json({ error: "bad id" });
+    }
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { id: true }
+    });
+
+    if (!event) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    const guest = await prisma.eventGuest.findUnique({
+      where: {
+        eventId_userId: {
+          eventId,
+          userId
+        }
+      }
+    });
+
+    if (!guest) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    await prisma.eventGuest.delete({
+      where: {
+        eventId_userId: {
+          eventId,
+          userId
+        }
+      }
+    });
+
+    return res.sendStatus(204);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+
+// POST /events/:eventId/guests/me
+// Add the logged-in user to the event.
+// Clearance: Regular (i.e., any authenticated user).
+// 400 if already on guest list.
+// 410 if full or ended.
+app.post("/events/:eventId/guests/me", requireAuthRegular, async (req, res) => {
+  try {
+    const eventId = parseIdParam(req.params.eventId);
+    if (eventId === null) {
+      return res.status(400).json({ error: "bad event id" });
+    }
+
+    if (!req.user) attachAuth(req);
+    const rank = await resolveEffectiveRank(req);
+    const uid = getCurrentUserId(req);
+
+    if (rank === undefined || !uid) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+
+    // Fetch user info for response
+    const me = await prisma.user.findUnique({
+      where: { id: uid },
+      select: { id: true, utorid: true, name: true }
+    });
+
+    if (!me) {
+      return res.status(404).json({ error: "user not found" });
+    }
+
+    // Load event with organizers & guests for checks
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        organizers: { select: { userId: true } },
+        guests: { select: { userId: true } }
+      }
+    });
+
+    if (!event) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    const now = new Date();
+
+    // 410 if event has ended
+    if (event.endTime && event.endTime <= now) {
+      return res.status(410).json({ error: "event ended" });
+    }
+
+    const isManagerPlus = rank >= ROLE_RANK.manager;
+    const isOrganizer = event.organizers.some(o => o.userId === uid);
+
+    // Regular users cannot interact with unpublished events.
+    // Managers/superusers can; organizers are handled like in other endpoints:
+    if (!event.published && !isManagerPlus && !isOrganizer) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    // Organizer cannot also be guest
+    if (isOrganizer) {
+      return res.status(400).json({ error: "organizer cannot be guest" });
+    }
+
+    // Already on guest list?
+    const alreadyGuest = event.guests.some(g => g.userId === uid);
+    if (alreadyGuest) {
+      return res.status(400).json({ error: "already guest" });
+    }
+
+    // Capacity / full check
+    const currentGuests = event.guests.length;
+    const isFull =
+      event.capacity !== null &&
+      typeof event.capacity === "number" &&
+      currentGuests >= event.capacity;
+
+    if (isFull) {
+      return res.status(410).json({ error: "event full" });
+    }
+
+    // Re-check capacity at insert time to avoid race
+    if (
+      event.capacity !== null &&
+      typeof event.capacity === "number" &&
+      currentGuests >= event.capacity
+    ) {
+      return res.status(410).json({ error: "event full" });
+    }
+
+    await prisma.eventGuest.create({
+      data: {
+        eventId,
+        userId: uid
+      }
+    });
+
+    return res.status(201).json({
+      id: event.id,
+      name: event.name,
+      location: event.location,
+      guestAdded: {
+        id: me.id,
+        utorid: me.utorid,
+        name: me.name
+      },
+      numGuests: currentGuests + 1
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+// DELETE /events/:eventId/guests/me
+// Remove the logged-in user from this event.
+// Clearance: Regular
+// 204 on success
+// 404 if user not RSVP'd
+// 410 if event has ended
+app.delete("/events/:eventId/guests/me", requireAuthRegular, async (req, res) => {
+  try {
+    const eventId = parseIdParam(req.params.eventId);
+    if (eventId === null) {
+      return res.status(400).json({ error: "bad event id" });
+    }
+
+    if (!req.user) attachAuth(req);
+    const rank = await resolveEffectiveRank(req);
+    const uid = getCurrentUserId(req);
+
+    if (rank === undefined || !uid) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        organizers: { select: { userId: true } },
+        guests: { select: { userId: true } }
+      }
+    });
+
+    if (!event) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    const now = new Date();
+
+    // 410 if event has ended
+    if (event.endTime && event.endTime <= now) {
+      return res.status(410).json({ error: "event ended" });
+    }
+
+    const isManagerPlus = rank >= ROLE_RANK.manager;
+    const isOrganizer = event.organizers.some(o => o.userId === uid);
+
+    // Regular users shouldn't interact with unpublished events they can't see
+    if (!event.published && !isManagerPlus && !isOrganizer) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    const guest = event.guests.find(g => g.userId === uid);
+    if (!guest) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    await prisma.eventGuest.delete({
+      where: {
+        eventId_userId: {
+          eventId,
+          userId: uid
+        }
+      }
+    });
+
+    return res.sendStatus(204);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+
+// POST /events/:eventId/transactions
+// Create a new reward transaction for an event.
+// Clearance: Manager+ OR organizer for this event.
+// type must be "event".
+// If utorid specified -> award to that guest.
+// If utorid omitted -> award to ALL eligible guests.
+// 400 if user not on guest list (or not eligible) when utorid specified.
+// 400 if not enough remaining points.
+// Awards points immediately; can be used after event has ended.
+app.post("/events/:eventId/transactions", async (req, res) => {
+  try {
+    const eventId = parseIdParam(req.params.eventId);
+    if (eventId === null) {
+      return res.status(400).json({ error: "bad event id" });
+    }
+
+    if (!req.user) attachAuth(req);
+    const rank = await resolveEffectiveRank(req);
+    const callerId = getCurrentUserId(req);
+
+    if (rank === undefined || !callerId) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+
+    // Load event with organizers + guests (with user + confirmed for eligibility)
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        organizers: { select: { userId: true } },
+        guests: {
+          select: {
+            userId: true,
+            confirmed: true,
+            user: { select: { id: true, utorid: true, name: true, points: true } }
+          }
+        }
+      }
+    });
+
+    if (!event) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    const isManagerPlus = rank >= ROLE_RANK.manager;
+    const isOrganizer = event.organizers.some(o => o.userId === callerId);
+
+    // Auth: must be manager+ or organizer of this event
+    if (!isManagerPlus && !isOrganizer) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+
+    // If caller is just an organizer (not manager+), event must be visible (published),
+    // otherwise treat as 404 (not visible to them).
+    if (!isManagerPlus && !event.published) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    const { type, utorid, amount, remark } = req.body || {};
+
+    // type must be "event"
+    if (type !== "event") {
+      return res.status(400).json({ error: "bad type" });
+    }
+
+    // amount: positive integer
+    const pts = Number(amount);
+    if (!Number.isInteger(pts) || pts <= 0) {
+      return res.status(400).json({ error: "bad amount" });
+    }
+
+    if (remark !== undefined && typeof remark !== "string") {
+      return res.status(400).json({ error: "bad remark" });
+    }
+    const remarkText = remark ? remark.trim() : "";
+
+    // Fetch caller for createdBy utorid
+    const creator = await prisma.user.findUnique({
+      where: { id: callerId },
+      select: { utorid: true }
+    });
+
+    if (!creator) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+
+    // Helper to compute eligible guests:
+    // Spec: only users who RSVP **and have their attendance confirmed**
+    function eligibleGuests() {
+      return event.guests.filter(g => g.confirmed === true);
+    }
+
+    // === Case 1: utorid specified -> single recipient ===
+    if (utorid !== undefined) {
+      if (typeof utorid !== "string" || !validUtorid(utorid.trim())) {
+        return res.status(400).json({ error: "bad utorid" });
+      }
+      const normalizedUtorid = utorid.trim().toLowerCase();
+
+      // Find guest user
+      const guest = event.guests.find(
+        g => g.user.utorid.toLowerCase() === normalizedUtorid
+      );
+
+      // Must be on guest list AND confirmed
+      if (!guest || guest.confirmed !== true) {
+        return res.status(400).json({ error: "user not eligible" });
+      }
+
+      // Check remaining points
+      if (event.pointsRemain < pts) {
+        return res.status(400).json({ error: "insufficient points" });
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        // Create transaction
+        const t = await tx.transaction.create({
+          data: {
+            type: "event",
+            spent: 0,
+            earned: pts,
+            remark: remarkText,
+            userId: guest.userId,
+            createdById: callerId,
+            relatedId: eventId
+          },
+          select: { id: true }
+        });
+
+        // Update guest points
+        await tx.user.update({
+          where: { id: guest.userId },
+          data: { points: guest.user.points + pts }
+        });
+
+        // Update event points
+        await tx.event.update({
+          where: { id: eventId },
+          data: {
+            pointsRemain: event.pointsRemain - pts,
+            pointsAwarded: event.pointsAwarded + pts
+          }
+        });
+
+        return t;
+      });
+
+      return res.status(201).json({
+        id: result.id,
+        recipient: guest.user.utorid,
+        awarded: pts,
+        type: "event",
+        relatedId: eventId,
+        remark: remarkText,
+        createdBy: creator.utorid
+      });
+    }
+
+    // === Case 2: utorid NOT specified -> award to ALL eligible guests ===
+    const recipients = eligibleGuests();
+
+    if (recipients.length === 0) {
+      return res.status(400).json({ error: "no eligible guests" });
+    }
+
+    const totalNeeded = pts * recipients.length;
+    if (event.pointsRemain < totalNeeded) {
+      return res.status(400).json({ error: "insufficient points" });
+    }
+
+    const txResults = await prisma.$transaction(async (tx) => {
+      const out = [];
+
+      for (const g of recipients) {
+        const t = await tx.transaction.create({
+          data: {
+            type: "event",
+            spent: 0,
+            earned: pts,
+            remark: remarkText,
+            userId: g.userId,
+            createdById: callerId,
+            relatedId: eventId
+          },
+          select: { id: true }
+        });
+
+        await tx.user.update({
+          where: { id: g.userId },
+          data: { points: g.user.points + pts }
+        });
+
+        out.push({
+          id: t.id,
+          recipient: g.user.utorid,
+          awarded: pts
+        });
+      }
+
+      await tx.event.update({
+        where: { id: eventId },
+        data: {
+          pointsRemain: event.pointsRemain - totalNeeded,
+          pointsAwarded: event.pointsAwarded + totalNeeded
+        }
+      });
+
+      return out;
+    });
+
+    const response = txResults.map(r => ({
+      id: r.id,
+      recipient: r.recipient,
+      awarded: r.awarded,
+      type: "event",
+      relatedId: eventId,
+      remark: remarkText,
+      createdBy: creator.utorid
+    }));
+
+    return res.status(201).json(response);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
 
 const server = app.listen(port, () => {
     console.log(`Server running on port ${port}`);
