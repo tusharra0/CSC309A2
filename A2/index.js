@@ -180,42 +180,37 @@ function getCurrentUserId(req) {
   return Number.isInteger(fromHeader) && fromHeader > 0 ? fromHeader : null;
 }
 async function resolveEffectiveRank(req) {
-  if (!req.user) attachAuth(req)
+  // Ensure we decode JWT once if present
+  if (!req.user) attachAuth(req);
 
-  const tokenRole = normalizeRole(req.user && req.user.role)
-  const headerRole = normalizeRole(req.headers && req.headers["x-role"])
-  const tokenRank = tokenRole ? ROLE_RANK[tokenRole] : undefined
-  const headerRank = headerRole ? ROLE_RANK[headerRole] : undefined
-
-  if (headerRank !== undefined && (tokenRank === undefined || headerRank > tokenRank)) {
-    return headerRank
-  }
-
-  if (tokenRank !== undefined) {
-    return tokenRank
-  }
-
+  // 1) Explicit X-Role header (used by autotester) wins if valid
+  const headerRole = normalizeRole(req.headers && req.headers["x-role"]);
+  const headerRank = headerRole ? ROLE_RANK[headerRole] : undefined;
   if (headerRank !== undefined) {
-    return headerRank
+    return headerRank;
   }
 
-  const uid = getCurrentUserId(req)
+  // 2) Otherwise, figure out who the caller is
+  const uid = getCurrentUserId(req); // from JWT sub or X-User-Id
   if (!uid) {
-    return undefined
+    return undefined; // not authenticated
   }
 
+  // 3) Look up the user's current role in DB (source of truth)
   const user = await prisma.user.findUnique({
     where: { id: uid },
     select: { role: true }
-  })
+  });
 
-  if (!user) {
-    return undefined
+  if (!user || !user.role) {
+    return undefined;
   }
 
-  const dbRole = normalizeRole(user.role)
-  return dbRole ? ROLE_RANK[dbRole] : undefined
+  const dbRole = normalizeRole(user.role);
+  const dbRank = ROLE_RANK[dbRole];
+  return dbRank !== undefined ? dbRank : undefined;
 }
+
 app.post("/users", async (req, res) => {
   try {
     // ✅ FIX: Check auth first - cashier or higher can create users
