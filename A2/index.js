@@ -294,53 +294,6 @@ app.post("/users", async (req, res) => {
   }
 });
 
-// Overwrite any previous /users/mock implementation with this one
-app.post("/users/mock", async (req, res) => {
-  try {
-    const payload = req.body ?? {};
-
-    // Accept either:
-    //   [ { ...user }, ... ]
-    // or
-    //   { users: [ { ...user }, ... ] }
-    let users;
-    if (Array.isArray(payload)) {
-      users = payload;
-    } else if (Array.isArray(payload.users)) {
-      users = payload.users;
-    } else {
-      // If format is unexpected, treat as "no users" but STILL reset table
-      users = [];
-    }
-
-    // Always reset users so each call is authoritative.
-    await prisma.user.deleteMany({});
-
-    if (users.length > 0) {
-      await prisma.user.createMany({
-        data: users.map(u => ({
-          utorid: String(u.utorid).toLowerCase(),
-          name: String(u.name),
-          email: String(u.email).toLowerCase(),
-          role: normalizeRole(u.role) || "regular",
-          password: u.password || null,
-          points: typeof u.points === "number" ? u.points : 0,
-          verified: u.verified === true,
-          suspicious: u.suspicious === true,
-          createdAt: u.createdAt ? new Date(u.createdAt) : undefined,
-          lastLogin: u.lastLogin ? new Date(u.lastLogin) : undefined
-        })),
-        // Not strictly needed after deleteMany, but harmless:
-        skipDuplicates: true
-      });
-    }
-
-    return res.sendStatus(200);
-  } catch (err) {
-    console.error("users/mock failed:", err);
-    return res.status(500).json({ error: "internal" });
-  }
-});
 
 
 
