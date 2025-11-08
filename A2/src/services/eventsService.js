@@ -321,6 +321,11 @@ const updateEvent = async ({ eventId, user, body }) => {
     throw createError(403, 'Permission denied.');
   }
 
+    const isManager = hasRole(user, 'manager', 'superuser');
+    if (!isManager && body.points !== undefined && body.points !== null) {
+      throw createError(403, 'Permission denied.');
+    }
+
   const data = {};
   if (body.name) data.name = body.name;
   if (body.description) data.description = body.description;
