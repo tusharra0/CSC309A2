@@ -399,7 +399,10 @@ const updateEvent = async ({ eventId, user, body }) => {
     data.endTime = newEnd;
   }
 
-  if (body.startTime !== undefined || body.endTime !== undefined) {
+  if (
+    (body.startTime !== undefined && body.startTime !== null) ||
+    (body.endTime !== undefined && body.endTime !== null)
+  ) {
     if (newStart < new Date()) {
       throw createError(400, 'Invalid event start time.');
     }
@@ -409,9 +412,10 @@ const updateEvent = async ({ eventId, user, body }) => {
   }
 
 
-  if (body.capacity !== null && body.capacity !== undefined) {
+ if (body.capacity !== null && body.capacity !== undefined) {
     const nextCapacity = validatePositiveInt(body.capacity, 'Invalid event capacity.');
-    if (event.guestLinks.length > nextCapacity) {
+    const guestCount = (event.guests || []).length;
+    if (guestCount > nextCapacity) {
       throw createError(400, 'Invalid event capacity.');
     }
     data.capacity = nextCapacity;
@@ -588,9 +592,9 @@ const addGuest = async ({ eventId, utorid, user }) => {
   }
 
   const currentGuests = (event.guests || []).length;
-  if (event.capacity != null && currentGuests >= event.capacity) {
-    throw createError(400, 'Event is full.');
-  }
+if (event.capacity != null && currentGuests >= event.capacity) {
+  throw createError(410, 'Event is at full capacity.');
+}
 
   await prisma.eventGuest.create({
     data: {
