@@ -326,6 +326,10 @@ const updateEvent = async ({ eventId, user, body }) => {
       throw createError(403, 'Permission denied.');
     }
 
+    if (!isManager && body.published !== undefined && body.published !== null) {
+    throw createError(403, 'Permission denied.');
+  }
+
   const data = {};
   if (body.name) data.name = body.name;
   if (body.description) data.description = body.description;
