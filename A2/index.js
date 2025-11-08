@@ -37,7 +37,7 @@ const authRoutes = require('./src/routes/authRoutes');
 const userRoutes = require('./src/routes/userRoutes');
 const transactionsRoutes = require('./src/routes/transactionsRoutes');
 const eventsRoutes = require('./src/routes/eventsRoutes');
-const promotionsRoutes = require('./routes/promotionsRoutes');
+const promotionsRoutes = require('./src/routes/promotionsRoutes');
 
 
 
