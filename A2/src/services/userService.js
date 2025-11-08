@@ -32,11 +32,14 @@ const createUser = async ({ utorid, name, email, password, role, verified }) => 
 const fetchUsers = async ({ name, role, verified, activated, page = 1, limit = 10 }) => {
   const where = {};
 
-  if (name) {
-    where.OR = [
-      { name: { contains: name, mode: 'insensitive' } },
-      { utorid: { contains: name, mode: 'insensitive' } }
-    ];
+  if (name !== undefined && name !== null) {
+    const trimmedName = String(name).trim();
+    if (trimmedName.length > 0) {
+      where.OR = [
+        { name: { contains: trimmedName, mode: 'insensitive' } },
+        { utorid: { contains: trimmedName, mode: 'insensitive' } }
+      ];
+    }
   }
 
   if (role) {
