@@ -48,7 +48,7 @@ const validatePositiveInt = (value, message) => {
   throw createError(400, message);
 };
 
-const eventHasEnded = (event) => new Date(event.endTime) < new Date();
+const eventHasEnded = (event) => new Date(event.endTime) <= new Date();
 
 const eventHasStarted = (event) => new Date(event.startTime) <= new Date();
 
@@ -719,11 +719,12 @@ const removeGuestSelf = async ({ eventId, user }) => {
     throw createError(401, 'Unauthorized');
   }
 
-  const guestRecord = await prisma.eventGuest.findFirst({
+  const guestRecord = await prisma.eventGuest.findUnique({
     where: {
-      eventId,
-      userId,
-      removedAt: null
+      eventId_userId: {
+        eventId,
+        userId
+      }
     }
   });
 
@@ -731,20 +732,15 @@ const removeGuestSelf = async ({ eventId, user }) => {
     throw createError(400, 'User is not a guest.');
   }
 
-  // Soft-delete: mark as removed instead of deleting row
-  await prisma.eventGuest.update({
+  await prisma.eventGuest.delete({
     where: {
       eventId_userId: {
-        eventId: guestRecord.eventId,
-        userId: guestRecord.userId
+        eventId,
+        userId
       }
-    },
-    data: {
-      removedAt: new Date()
     }
   });
 
-  // No payload needed; controller/handle will send 204
   return;
 };
 
