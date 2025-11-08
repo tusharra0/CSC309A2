@@ -144,7 +144,7 @@ model Event {
   location     String
   startTime    DateTime
   endTime      DateTime
-  capacity     Int
+  capacity     Int?
   pointsTotal  Int       @default(0)
   pointsRemain Int       @default(0)
   pointsAwarded Int      @default(0)
