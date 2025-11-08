@@ -71,19 +71,21 @@ exports.addOrganizer = (req, res) => {
 
 exports.removeOrganizer = (req, res) => {
   const eventId = Number(req.params.eventId);
-  const organizerId = Number(req.params.userId);
-  if (!Number.isInteger(eventId) || !Number.isInteger(organizerId)) {
-    return res.status(400).json({ message: 'Invalid event id' });
+  const userId = Number(req.params.userId);
+
+  if (!Number.isInteger(eventId) || !Number.isInteger(userId)) {
+    return res.status(400).json({ message: 'Invalid id' });
   }
+
   return handle(
     res,
     () =>
       eventsService.removeOrganizer({
         eventId,
-        organizerId,
+        organizerUserId: userId,
         user: req.user
       }),
-    204
+    200
   );
 };
 

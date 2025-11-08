@@ -486,12 +486,22 @@ const addOrganizer = async ({ eventId, utorid, user }) => {
   };
 };
 
-const removeOrganizer = async ({ eventId, organizerId, user }) => {
-  ensureManager(user);
+const removeOrganizer = async ({ eventId, organizerUserId, user }) => {
+  if (!hasRole(user, 'manager', 'superuser')) {
+    throw createError(403, 'Permission denied.');
+  }
+
   const event = await fetchEvent(eventId);
 
-  const exists = event.organizerLinks.some((link) => link.userId === organizerId);
-  if (!exists) {
+  if (eventHasEnded(event)) {
+    throw createError(410, 'Cannot remove organizer after event end.');
+  }
+
+  const existing = (event.organizers || []).find(
+    (o) => o.userId === organizerUserId
+  );
+
+  if (!existing) {
     throw createError(404, 'Organizer not found.');
   }
 
@@ -499,11 +509,20 @@ const removeOrganizer = async ({ eventId, organizerId, user }) => {
     where: {
       eventId_userId: {
         eventId,
-        userId: organizerId
+        userId: organizerUserId
       }
     }
   });
+
+  const refreshed = await fetchEvent(eventId);
+
+  return {
+    id: refreshed.id,
+    name: refreshed.name,
+    organizers: mapOrganizers(refreshed)
+  };
 };
+
 
 const addGuest = async ({ eventId, utorid, user }) => {
   if (!hasRole(user, 'manager', 'superuser', 'cashier')) {
