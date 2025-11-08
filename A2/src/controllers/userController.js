@@ -488,22 +488,42 @@ exports.updateMyInfo = async (req, res) => {
     }
 
     if (Object.prototype.hasOwnProperty.call(updates, 'birthday') && updates.birthday !== null) {
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateRegex.test(updates.birthday)) {
-        return res.status(400).json({
-          message: 'Birthday must be in YYYY-MM-DD format'
-        });
-      }
+    const birthday = updates.birthday;
 
-      const date = new Date(`${updates.birthday}T00:00:00.000Z`);
-      if (Number.isNaN(date.getTime())) {
-        return res.status(400).json({
-          message: 'Invalid birthday date'
-        });
-      }
-
-      updateData.birthday = date;
+    // Must be a string in strict YYYY-MM-DD
+    if (typeof birthday !== 'string') {
+      return res.status(400).json({ message: 'Invalid birthday' });
     }
+
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthday);
+    if (!match) {
+      return res.status(400).json({ message: 'Invalid birthday' });
+    }
+
+    const year = Number(match[1]);
+    const month = Number(match[2]); // 1-12
+    const day = Number(match[3]);   // 1-31
+
+    const date = new Date(birthday + 'T00:00:00.000Z');
+
+    // Reject if JS auto-fixes it (e.g. 1990-02-30 -> March 2)
+    if (
+      Number.isNaN(date.getTime()) ||
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() + 1 !== month ||
+      date.getUTCDate() !== day
+    ) {
+      return res.status(400).json({ message: 'Invalid birthday' });
+    }
+
+    const today = new Date();
+    if (date > today) {
+      return res.status(400).json({ message: 'Invalid birthday' });
+    }
+
+  // Store as Date; your response already formats via toDateOnlyString(...)
+  updateData.birthday = date;
+}
 
     const hasRealUpdates = Object.keys(updateData).length > 0;
     if (!hasRealUpdates && !hasAvatar) {
