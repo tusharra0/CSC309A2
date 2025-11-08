@@ -34,7 +34,8 @@ const mapPerson = (user) => ({
   name: user.name
 });
 
-const mapOrganizers = (event) => event.organizerLinks.map((link) => mapPerson(link.user));
+const mapOrganizers = (event) =>
+  (event.organizers || []).map((link) => mapPerson(link.user));
 const mapGuests = (event) => event.guestLinks.map((link) => mapPerson(link.user));
 
 const isoDate = (value) => {
@@ -60,9 +61,15 @@ const eventHasEnded = (event) => new Date(event.endTime) < new Date();
 
 const eventHasStarted = (event) => new Date(event.startTime) <= new Date();
 
-const isOrganizer = (event, userId) => event.organizerLinks.some((link) => link.userId === userId);
+const isOrganizer = (event, userId) =>
+  Array.isArray(event.organizers) &&
+  event.organizers.some((link) => link.userId === userId);
 
-const isGuest = (event, userId) => event.guestLinks.some((link) => link.userId === userId);
+const isGuest = (event, userId) =>
+  Array.isArray(event.guests) &&
+  event.guests.some((link) => link.userId === userId);
+
+
 
 const presentCreatedEvent = (event) => ({
   id: event.id,
@@ -123,11 +130,24 @@ const presentEventDetail = (event, options) => {
 const fetchEvent = async (eventId) => {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    include: organizerInclude
+    include: {
+      organizers: {
+        include: {
+          user: true
+        }
+      },
+      guests: {
+        include: {
+          user: true
+        }
+      }
+    }
   });
+
   if (!event) {
     throw createError(404, 'Event not found.');
   }
+
   return event;
 };
 
