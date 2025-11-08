@@ -712,13 +712,11 @@ const removeGuestSelf = async ({ eventId, user }) => {
 
   // If the event has ended, self-unregister is not allowed.
   if (eventHasEnded(event)) {
-       console.log('[removeGuestSelf] eventHasEnded → 410');
     throw createError(410, 'Cannot delete guest after event end.');
   }
 
   const userId = Number(user?.id);
   if (!Number.isFinite(userId)) {
-     console.log('[removeGuestSelf] invalid user → 401');
     throw createError(401, 'Unauthorized');
   }
 
@@ -731,7 +729,6 @@ const removeGuestSelf = async ({ eventId, user }) => {
   });
 
   if (!guestRecord) {
-       console.log('[removeGuestSelf] no guest record → 400');
     throw createError(400, 'User is not a guest.');
   }
 
