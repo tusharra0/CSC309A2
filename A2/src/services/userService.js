@@ -36,14 +36,23 @@ const fetchUsers = async ({ name, role, verified, activated, page = 1, limit = 1
     const trimmedName = String(name).trim();
     if (trimmedName.length > 0) {
       where.OR = [
-        { name: { contains: trimmedName, mode: 'insensitive' } },
-        { utorid: { contains: trimmedName, mode: 'insensitive' } }
+        {
+          name: {
+            contains: trimmedName
+          }
+        },
+        {
+          utorid: {
+            contains: trimmedName
+          }
+        }
       ];
     }
   }
 
-  if (role) {
-    where.role = role;
+
+  if (role !== undefined && role !== null) {
+    where.role = String(role).toLowerCase();
   }
 
   if (typeof verified === 'boolean') {
