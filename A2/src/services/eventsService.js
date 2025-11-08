@@ -58,7 +58,7 @@ const isOrganizer = (event, userId) =>
 
 const isGuest = (event, userId) =>
   Array.isArray(event.guests) &&
-  event.guests.some((g) => g.userId === userId);
+  event.guests.some((g) => g.userId === userId && !g.removedAt);
 
 const mapPerson = (user) => ({
   id: user.id,
@@ -70,7 +70,9 @@ const mapOrganizers = (event) =>
   (event.organizers || []).map((link) => mapPerson(link.user));
 
 const mapGuests = (event) =>
-  (event.guests || []).map((link) => mapPerson(link.user));
+  (event.guests || [])
+    .filter((g) => !g.removedAt)
+    .map((link) => mapPerson(link.user));
 
 
 
@@ -677,12 +679,11 @@ const removeGuestSelf = async ({ eventId, user }) => {
     throw createError(401, 'Unauthorized');
   }
 
-  const guestRecord = await prisma.eventGuest.findUnique({
+  const guestRecord = await prisma.eventGuest.findFirst({
     where: {
-      eventId_userId: {
-        eventId,
-        userId
-      }
+      eventId,
+      userId,
+      removedAt: null
     }
   });
 
@@ -690,23 +691,21 @@ const removeGuestSelf = async ({ eventId, user }) => {
     throw createError(400, 'User is not a guest.');
   }
 
-  await prisma.eventGuest.delete({
+  // Soft-delete: mark as removed instead of deleting row
+  await prisma.eventGuest.update({
     where: {
       eventId_userId: {
-        eventId,
-        userId
+        eventId: guestRecord.eventId,
+        userId: guestRecord.userId
       }
+    },
+    data: {
+      removedAt: new Date()
     }
   });
 
-  const refreshed = await fetchEvent(eventId);
-
-  return {
-    id: refreshed.id,
-    name: refreshed.name,
-    location: refreshed.location,
-    numGuests: (refreshed.guests || []).length
-  };
+  // No payload needed; controller/handle will send 204
+  return;
 };
 
 
