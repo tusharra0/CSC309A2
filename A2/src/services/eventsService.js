@@ -506,18 +506,18 @@ const removeOrganizer = async ({ eventId, organizerId, user }) => {
 };
 
 const addGuest = async ({ eventId, utorid, user }) => {
-  const event = await fetchEvent(eventId);
-
-  if (!hasRole(user, 'manager', 'superuser') && !isOrganizer(event, user.id)) {
+  if (!hasRole(user, 'manager', 'superuser', 'cashier')) {
     throw createError(403, 'Permission denied.');
-  }
-
-  if (eventHasEnded(event)) {
-    throw createError(410, 'Cannot add guest after event end.');
   }
 
   if (!utorid) {
     throw createError(400, 'Utorid is required');
+  }
+
+  const event = await fetchEvent(eventId);
+
+  if (eventHasEnded(event)) {
+    throw createError(410, 'Cannot add guest after event end.');
   }
 
   const person = await prisma.user.findUnique({ where: { utorid } });
@@ -533,17 +533,28 @@ const addGuest = async ({ eventId, utorid, user }) => {
     throw createError(400, 'User is already a guest.');
   }
 
-  ensureCapacityAvailable(event);
+  const currentGuests = (event.guests || []).length;
+  if (event.capacity != null && currentGuests >= event.capacity) {
+    throw createError(400, 'Event is full.');
+  }
 
-  await incrementGuests(event.id, person.id);
+  await prisma.eventGuest.create({
+    data: {
+      eventId: event.id,
+      userId: person.id
+    }
+  });
 
-  const refreshed = await fetchEvent(event.id);
+  const refreshed = await fetchEvent(eventId);
+  const updatedGuests = refreshed.guests || [];
+  const lastGuest = updatedGuests.find((g) => g.userId === person.id);
+
   return {
     id: refreshed.id,
     name: refreshed.name,
     location: refreshed.location,
-    guestAdded: mapPerson(person),
-    numGuests: refreshed.guestLinks.length
+    guestAdded: mapPerson(lastGuest ? lastGuest.user : person),
+    numGuests: updatedGuests.length
   };
 };
 
