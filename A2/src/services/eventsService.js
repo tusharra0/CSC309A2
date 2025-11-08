@@ -729,7 +729,7 @@ const removeGuestSelf = async ({ eventId, user }) => {
   });
 
   if (!guestRecord) {
-    throw createError(410, 'User is not a guest.');
+    throw createError(400, 'User is not a guest.');
   }
 
   // Delete using a robust condition (no reliance on composite alias naming)
