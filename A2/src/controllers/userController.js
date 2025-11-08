@@ -134,7 +134,6 @@ exports.getAllUsers = async (req, res) => {
       activated,
       page,
       limit,
-      requesterRole: req.user.role
     });
 
     return res.status(200).json(result);

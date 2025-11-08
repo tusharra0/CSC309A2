@@ -29,7 +29,7 @@ const createUser = async ({ utorid, name, email, password, role, verified }) => 
   });
 };
 
-const fetchUsers = async ({ name, role, verified, activated, requesterRole, page = 1, limit = 10 }) => {
+const fetchUsers = async ({ name, role, verified, activated, page = 1, limit = 10 }) => {
   const where = {};
 
   if (name) {
@@ -41,8 +41,6 @@ const fetchUsers = async ({ name, role, verified, activated, requesterRole, page
 
   if (role) {
     where.role = role;
-  } else if (requesterRole !== 'superuser') {
-    where.role = { not: 'superuser' };
   }
 
   if (typeof verified === 'boolean') {
@@ -80,6 +78,7 @@ const fetchUsers = async ({ name, role, verified, activated, requesterRole, page
 
   return { count, results };
 };
+
 
   module.exports = {
     createUser,
