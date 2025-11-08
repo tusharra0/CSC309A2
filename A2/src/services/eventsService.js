@@ -16,16 +16,12 @@ const hasRole = (user, ...roles) => {
 };
 
 const organizerInclude = {
-  organizerLinks: {
+  organizers: {
     include: {
       user: true
     }
   },
-  guestLinks: {
-    include: {
-      user: true
-    }
-  }
+  guests: true
 };
 
 const mapPerson = (user) => ({
@@ -96,7 +92,7 @@ const presentEventSummary = (event) => ({
   pointsRemain: event.pointsRemain,
   pointsAwarded: event.pointsAwarded,
   published: event.published,
-  numGuests: event.guestLinks.length
+  numGuests: (event.guests || []).length
 });
 
 const presentEventDetail = (event, options) => {
@@ -255,11 +251,13 @@ const listEvents = async ({ user, query }) => {
   }
 
   const where = {};
+
   if (query.name) {
-    where.name = { contains: query.name, mode: 'insensitive' };
+    where.name = { contains: query.name };
   }
+
   if (query.location) {
-    where.location = { contains: query.location, mode: 'insensitive' };
+    where.location = { contains: query.location };
   }
 
   if (startedFilter !== undefined) {
@@ -288,9 +286,11 @@ const listEvents = async ({ user, query }) => {
 
   const filtered = showFull
     ? baseEvents
-    : baseEvents.filter(
-        (event) => !event.capacity || event.guestLinks.length < event.capacity
-      );
+    : baseEvents.filter((event) => {
+        if (event.capacity == null) return true;
+        const guestCount = (event.guests || []).length;
+        return guestCount < event.capacity;
+      });
 
   const count = filtered.length;
   const startIndex = (page - 1) * limit;
@@ -298,9 +298,10 @@ const listEvents = async ({ user, query }) => {
 
   return {
     count,
-    events: paged.map((event) => presentEventSummary(event))
+    results: paged.map((event) => presentEventSummary(event))
   };
 };
+
 
 const fetchEventForView = async ({ eventId, user }) => {
   const event = await fetchEvent(eventId);
