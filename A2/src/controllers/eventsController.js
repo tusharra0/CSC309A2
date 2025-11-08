@@ -108,7 +108,7 @@ exports.addGuest = (req, res) => {
         utorid: req.body?.utorid,
         user: req.user
       }),
-    200
+    201
   );
 };
 
