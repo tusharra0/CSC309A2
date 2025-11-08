@@ -303,16 +303,22 @@ exports.updateUserById = async (req, res) => {
     }
 
     // Check if trying to promote a suspicious user to cashier
-    const willBeSuspicious =
-      sanitizedUpdates.suspicious !== undefined ? sanitizedUpdates.suspicious : existingUser.suspicious;
-    const targetRole = sanitizedUpdates.role ?? existingUser.role;
-    const willBeCashier = targetRole === 'cashier';
+    const resultingSuspicious =
+    sanitizedUpdates.suspicious !== undefined
+      ? sanitizedUpdates.suspicious
+      : existingUser.suspicious;
+  const resultingRole = sanitizedUpdates.role ?? existingUser.role;
 
-    if (willBeSuspicious && willBeCashier) {
-      return res.status(400).json({
-        message: 'Suspicious users cannot be cashiers.'
-      });
-    }
+  // Are we PROMOTING to cashier (non-cashier -> cashier)?
+  const isPromotingToCashier =
+    existingUser.role !== 'cashier' && resultingRole === 'cashier';
+
+  // Rule: cannot promote a suspicious user to cashier
+  if (isPromotingToCashier && resultingSuspicious) {
+    return res.status(400).json({
+      message: 'Suspicious users cannot be promoted to cashier.'
+    });
+  }
 
     // Prepare update data - only include provided fields
     const updateData = {};
