@@ -160,8 +160,11 @@ const validateEventTimes = (startTime, endTime) => {
 };
 
 const ensureCapacityAvailable = (event) => {
-  if (event.capacity && event.guestLinks.length >= event.capacity) {
-    throw createError(410, 'Event is at full capacity.');
+  if (event.capacity != null) {
+    const guestsCount = (event.guests || []).length;
+    if (guestsCount >= event.capacity) {
+      throw createError(400, 'Event is full.');
+    }
   }
 };
 
@@ -607,7 +610,7 @@ const addGuestSelf = async ({ eventId, user }) => {
     name: refreshed.name,
     location: refreshed.location,
     guestAdded: mapPerson(person),
-    numGuests: refreshed.guestLinks.length
+    numGuests: (refreshed.guests || []).length
   };
 };
 
