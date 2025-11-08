@@ -672,12 +672,43 @@ const removeGuestSelf = async ({ eventId, user }) => {
     throw createError(410, 'Cannot delete guest after event end.');
   }
 
-  if (!isGuest(event, user.id)) {
-    throw createError(404, 'Guest not found.');
+  const userId = Number(user?.id);
+  if (!Number.isFinite(userId)) {
+    throw createError(401, 'Unauthorized');
   }
 
-  await decrementGuests(event.id, user.id);
+  const guestRecord = await prisma.eventGuest.findUnique({
+    where: {
+      eventId_userId: {
+        eventId,
+        userId
+      }
+    }
+  });
+
+  if (!guestRecord) {
+    throw createError(400, 'User is not a guest.');
+  }
+
+  await prisma.eventGuest.delete({
+    where: {
+      eventId_userId: {
+        eventId,
+        userId
+      }
+    }
+  });
+
+  const refreshed = await fetchEvent(eventId);
+
+  return {
+    id: refreshed.id,
+    name: refreshed.name,
+    location: refreshed.location,
+    numGuests: (refreshed.guests || []).length
+  };
 };
+
 
 const awardEventPoints = async ({ eventId, user, body }) => {
   const event = await fetchEvent(eventId);

@@ -146,11 +146,13 @@ exports.removeGuest = (req, res) => {
   );
 };
 
+
 exports.removeGuestSelf = (req, res) => {
   const eventId = Number(req.params.eventId);
   if (!Number.isInteger(eventId)) {
     return res.status(400).json({ message: 'Invalid event id' });
   }
+
   return handle(
     res,
     () =>
@@ -158,7 +160,7 @@ exports.removeGuestSelf = (req, res) => {
         eventId,
         user: req.user
       }),
-    204
+    200
   );
 };
 
