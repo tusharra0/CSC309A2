@@ -710,6 +710,7 @@ const removeGuest = async ({ eventId, userId, user }) => {
 const removeGuestSelf = async ({ eventId, user }) => {
   const event = await fetchEvent(eventId);
 
+  // If the event has ended, self-unregister is not allowed.
   if (eventHasEnded(event)) {
     throw createError(410, 'Cannot delete guest after event end.');
   }
@@ -719,12 +720,11 @@ const removeGuestSelf = async ({ eventId, user }) => {
     throw createError(401, 'Unauthorized');
   }
 
-  const guestRecord = await prisma.eventGuest.findUnique({
+  // Find the guest record in a schema-agnostic way
+  const guestRecord = await prisma.eventGuest.findFirst({
     where: {
-      eventId_userId: {
-        eventId,
-        userId
-      }
+      eventId,
+      userId
     }
   });
 
@@ -732,17 +732,18 @@ const removeGuestSelf = async ({ eventId, user }) => {
     throw createError(400, 'User is not a guest.');
   }
 
-  await prisma.eventGuest.delete({
+  // Delete using a robust condition (no reliance on composite alias naming)
+  await prisma.eventGuest.deleteMany({
     where: {
-      eventId_userId: {
-        eventId,
-        userId
-      }
+      eventId,
+      userId
     }
   });
 
+  // Controller's handle(..., 204) will turn this into 204 No Content on success.
   return;
 };
+
 
 
 const awardEventPoints = async ({ eventId, user, body }) => {
