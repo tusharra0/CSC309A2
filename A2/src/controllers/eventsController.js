@@ -57,12 +57,15 @@ exports.addOrganizer = (req, res) => {
   if (!Number.isInteger(eventId)) {
     return res.status(400).json({ message: 'Invalid event id' });
   }
-  return handle(res, () =>
-    eventsService.addOrganizer({
-      eventId,
-      utorid: req.body?.utorid,
-      user: req.user
-    })
+  return handle(
+    res,
+    () =>
+      eventsService.addOrganizer({
+        eventId,
+        utorid: req.body?.utorid,
+        user: req.user
+      }),
+    201 
   );
 };
 
