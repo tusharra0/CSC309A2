@@ -97,8 +97,9 @@ const presentEventSummary = (event) => ({
   numGuests: (event.guests || []).length
 });
 
-const presentEventDetail = (event, options) => {
-  const common = {
+
+const presentEventDetail = (event, { showGuests = false } = {}) => {
+  const base = {
     id: event.id,
     name: event.name,
     description: event.description,
@@ -106,39 +107,19 @@ const presentEventDetail = (event, options) => {
     startTime: event.startTime.toISOString(),
     endTime: event.endTime.toISOString(),
     capacity: event.capacity,
+    published: event.published,
+    pointsRemain: event.pointsRemain,
+    pointsAwarded: event.pointsAwarded,
     organizers: mapOrganizers(event)
   };
 
-  if (options.showGuests) {
-    return {
-      ...common,
-      guests: mapGuests(event),
-      published: event.published,
-      pointsRemain: event.pointsRemain,
-      pointsAwarded: event.pointsAwarded
-    };
+  if (showGuests) {
+    base.guests = mapGuests(event);
   }
 
-  return {
-    ...common,
-    numGuests: event.guestLinks.length
-  };
+  return base;
 };
 
-const presentEventDetails = (event) => ({
-  id: event.id,
-  name: event.name,
-  description: event.description,
-  location: event.location,
-  startTime: event.startTime.toISOString(),
-  endTime: event.endTime.toISOString(),
-  capacity: event.capacity,
-  guests: mapGuests(event),
-  published: event.published,
-  pointsRemain: event.pointsRemain,
-  pointsAwarded: event.pointsAwarded,
-  organizers: mapOrganizers(event)
-});
 
 const fetchEvent = async (eventId) => {
   const event = await prisma.event.findUnique({
@@ -349,7 +330,21 @@ const listEvents = async ({ user, query }) => {
 
 
 const fetchEventForView = async ({ eventId, user }) => {
-  const event = await fetchEvent(eventId);
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    include: {
+      organizers: {
+        include: { user: true }
+      },
+      guests: {
+        include: { user: true }
+      }
+    }
+  });
+
+  if (!event) {
+    throw createError(404, 'Event not found.');
+  }
 
   if (!event.published && hasRole(user, 'regular', 'cashier') && !isOrganizer(event, user.id)) {
     throw createError(404, 'Event not found.');
@@ -359,6 +354,7 @@ const fetchEventForView = async ({ eventId, user }) => {
 
   return presentEventDetail(event, { showGuests: privileged });
 };
+
 
 const updateEvent = async ({ eventId, user, body }) => {
   const event = await fetchEvent(eventId);
