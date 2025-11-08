@@ -32,7 +32,9 @@ const mapPerson = (user) => ({
 
 const mapOrganizers = (event) =>
   (event.organizers || []).map((link) => mapPerson(link.user));
-const mapGuests = (event) => event.guestLinks.map((link) => mapPerson(link.user));
+
+const mapGuests = (event) =>
+  (event.guests || []).map((link) => mapPerson(link.user));
 
 const isoDate = (value) => {
   if (value === null || value === undefined) return null;
@@ -123,6 +125,21 @@ const presentEventDetail = (event, options) => {
   };
 };
 
+const presentEventDetails = (event) => ({
+  id: event.id,
+  name: event.name,
+  description: event.description,
+  location: event.location,
+  startTime: event.startTime.toISOString(),
+  endTime: event.endTime.toISOString(),
+  capacity: event.capacity,
+  guests: mapGuests(event),
+  published: event.published,
+  pointsRemain: event.pointsRemain,
+  pointsAwarded: event.pointsAwarded,
+  organizers: mapOrganizers(event)
+});
+
 const fetchEvent = async (eventId) => {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
@@ -145,6 +162,31 @@ const fetchEvent = async (eventId) => {
   }
 
   return event;
+};
+
+const getEvent = async ({ eventId, user }) => {
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    include: {
+      organizers: {
+        include: { user: true }
+      },
+      guests: {
+        include: { user: true }
+      }
+    }
+  });
+
+  if (!event) {
+    throw createError(404, 'Event not found.');
+  }
+
+  // Regular users / cashiers can only see published events
+  if (!event.published && !hasRole(user, 'manager', 'superuser')) {
+    throw createError(404, 'Event not found.');
+  }
+
+  return presentEventDetails(event);
 };
 
 const ensureManager = (user) => {

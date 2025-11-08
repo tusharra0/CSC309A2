@@ -27,7 +27,7 @@ exports.getEvent = (req, res) => {
   if (!Number.isInteger(eventId)) {
     return res.status(400).json({ message: 'Invalid event id' });
   }
-  return handle(res, () => eventsService.fetchEventForView({ eventId, user: req.user }), 200);
+  return handle(res, () => eventsService.getEvent({ eventId, user: req.user }), 200);
 };
 
 exports.updateEvent = (req, res) => {
