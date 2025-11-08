@@ -160,7 +160,7 @@ exports.removeGuestSelf = (req, res) => {
         eventId,
         user: req.user
       }),
-    200
+    204
   );
 };
 
