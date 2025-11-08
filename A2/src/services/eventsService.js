@@ -21,20 +21,13 @@ const organizerInclude = {
       user: true
     }
   },
-  guests: true
+  guests: {
+    include: {
+      user: true
+    }
+  }
 };
 
-const mapPerson = (user) => ({
-  id: user.id,
-  utorid: user.utorid,
-  name: user.name
-});
-
-const mapOrganizers = (event) =>
-  (event.organizers || []).map((link) => mapPerson(link.user));
-
-const mapGuests = (event) =>
-  (event.guests || []).map((link) => mapPerson(link.user));
 
 const isoDate = (value) => {
   if (value === null || value === undefined) return null;
@@ -61,11 +54,23 @@ const eventHasStarted = (event) => new Date(event.startTime) <= new Date();
 
 const isOrganizer = (event, userId) =>
   Array.isArray(event.organizers) &&
-  event.organizers.some((link) => link.userId === userId);
+  event.organizers.some((o) => o.userId === userId);
 
 const isGuest = (event, userId) =>
   Array.isArray(event.guests) &&
-  event.guests.some((link) => link.userId === userId);
+  event.guests.some((g) => g.userId === userId);
+
+const mapPerson = (user) => ({
+  id: user.id,
+  utorid: user.utorid,
+  name: user.name
+});
+
+const mapOrganizers = (event) =>
+  (event.organizers || []).map((link) => mapPerson(link.user));
+
+const mapGuests = (event) =>
+  (event.guests || []).map((link) => mapPerson(link.user));
 
 
 
@@ -99,7 +104,7 @@ const presentEventSummary = (event) => ({
 
 
 const presentEventDetail = (event, { showGuests = false } = {}) => {
-  const base = {
+  const result = {
     id: event.id,
     name: event.name,
     description: event.description,
@@ -114,28 +119,25 @@ const presentEventDetail = (event, { showGuests = false } = {}) => {
   };
 
   if (showGuests) {
-    base.guests = mapGuests(event);
+    result.guests = mapGuests(event);
   }
 
-  return base;
+  return result;
 };
 
+const eventIncludeFull = {
+  organizers: {
+    include: { user: true }
+  },
+  guests: {
+    include: { user: true }
+  }
+};
 
 const fetchEvent = async (eventId) => {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    include: {
-      organizers: {
-        include: {
-          user: true
-        }
-      },
-      guests: {
-        include: {
-          user: true
-        }
-      }
-    }
+    include: eventIncludeFull
   });
 
   if (!event) {
@@ -250,11 +252,7 @@ const createEvent = async ({ body, user }) => {
     }
   });
 
-  return presentCreatedEvent({
-    ...created,
-    guestLinks: [],
-    organizerLinks: []
-  });
+  return presentCreatedEvent(created);
 };
 
 const listEvents = async ({ user, query }) => {
@@ -332,25 +330,19 @@ const listEvents = async ({ user, query }) => {
 const fetchEventForView = async ({ eventId, user }) => {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    include: {
-      organizers: {
-        include: { user: true }
-      },
-      guests: {
-        include: { user: true }
-      }
-    }
+    include: organizerInclude
   });
 
   if (!event) {
     throw createError(404, 'Event not found.');
   }
 
-  if (!event.published && hasRole(user, 'regular', 'cashier') && !isOrganizer(event, user.id)) {
+  const privileged =
+    hasRole(user, 'manager', 'superuser') || isOrganizer(event, user.id);
+
+  if (!event.published && !privileged) {
     throw createError(404, 'Event not found.');
   }
-
-  const privileged = hasRole(user, 'manager', 'superuser') || isOrganizer(event, user.id);
 
   return presentEventDetail(event, { showGuests: privileged });
 };
@@ -705,9 +697,7 @@ const awardEventPoints = async ({ eventId, user, body }) => {
           userId: requesterId
         }
       },
-      select: {
-        eventId: true
-      }
+      select: { eventId: true }
     });
 
     if (!organizerRecord) {
@@ -725,20 +715,20 @@ const awardEventPoints = async ({ eventId, user, body }) => {
   }
 
   const recipientUtorid = body.utorid;
-
+  const guests = event.guests || [];
   const recipients = [];
 
   if (recipientUtorid) {
-    const guest = event.guestLinks.find((link) => link.user.utorid === recipientUtorid);
+    const guest = guests.find((link) => link.user.utorid === recipientUtorid);
     if (!guest) {
       throw createError(400, 'User is not a guest.');
     }
     recipients.push(guest.user);
   } else {
-    if (!event.guestLinks.length) {
+    if (!guests.length) {
       throw createError(400, 'User is not a guest.');
     }
-    recipients.push(...event.guestLinks.map((link) => link.user));
+    recipients.push(...guests.map((link) => link.user));
   }
 
   const unitPoints = Math.round(amount);
@@ -797,6 +787,7 @@ const awardEventPoints = async ({ eventId, user, body }) => {
 
   return recipientUtorid ? results[0] : results;
 };
+
 
 module.exports = {
   createEvent,

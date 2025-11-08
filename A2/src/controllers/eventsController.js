@@ -22,12 +22,18 @@ exports.createEvent = (req, res) =>
 exports.listEvents = (req, res) =>
   handle(res, () => eventsService.listEvents({ user: req.user, query: req.query }), 200);
 
+
 exports.getEvent = (req, res) => {
   const eventId = Number(req.params.eventId);
   if (!Number.isInteger(eventId)) {
     return res.status(400).json({ message: 'Invalid event id' });
   }
-  return handle(res, () => fetchEventForView({ eventId, user: req.user }), 200);
+
+  return handle(
+    res,
+    () => eventsService.fetchEventForView({ eventId, user: req.user }),
+    200
+  );
 };
 
 exports.updateEvent = (req, res) => {
