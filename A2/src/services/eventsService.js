@@ -117,7 +117,8 @@ const presentEventDetail = (event, { showGuests = false } = {}) => {
     published: event.published,
     pointsRemain: event.pointsRemain,
     pointsAwarded: event.pointsAwarded,
-    organizers: mapOrganizers(event)
+    organizers: mapOrganizers(event),
+    numGuests: (event.guests || []).length
   };
 
   if (showGuests) {
@@ -365,6 +366,41 @@ const updateEvent = async ({ eventId, user, body }) => {
     if (!isManager && body.published !== undefined && body.published !== null) {
     throw createError(403, 'Permission denied.');
   }
+
+  const started = eventHasStarted(event);
+
+  // interpret "null" as "no change" like we did for other cases
+  const wantsName =
+    body.name !== undefined && body.name !== null;
+  const wantsDescription =
+    body.description !== undefined && body.description !== null;
+  const wantsLocation =
+    body.location !== undefined && body.location !== null;
+  const wantsStartTime =
+    body.startTime !== undefined && body.startTime !== null;
+  const wantsEndTime =
+    body.endTime !== undefined && body.endTime !== null;
+  const wantsCapacity =
+    body.capacity !== undefined && body.capacity !== null;
+  const wantsPublished =
+    body.published !== undefined && body.published !== null;
+
+  // if event already started, block any of these updates
+  if (
+    started &&
+    (
+      wantsName ||
+      wantsDescription ||
+      wantsLocation ||
+      wantsStartTime ||
+      wantsEndTime ||
+      wantsCapacity ||
+      wantsPublished
+    )
+  ) {
+    throw createError(400, 'Cannot update event after start time.');
+  }
+
 
   const data = {};
   if (body.name) data.name = body.name;
