@@ -30,6 +30,7 @@ const createUser = async ({ utorid, name, email, password, role, verified }) => 
 };
 
 const fetchUsers = async ({ name, role, verified, activated, page = 1, limit = 10 }) => {
+  
   const where = {};
     if (name) {
       where.OR = [
@@ -59,6 +60,13 @@ const fetchUsers = async ({ name, role, verified, activated, page = 1, limit = 1
     if (typeof activated === 'boolean') {
       where.lastLogin = activated ? { not: null } : null;
     }
+
+    if (!role) {
+  // Only hide superusers when the requester is NOT a superuser
+    if (requesterRole !== 'superuser') {
+      where.role = { not: 'superuser' };
+    }
+  }
 
     const skip = (page - 1) * limit;
 
