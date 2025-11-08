@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const promotionsController = require('../controllers/promotionsController');
-const authRequired = require('../middleware/auth'); 
+const { authRequired } = require('../middleware/auth');
 
 router.post('/', authRequired, promotionsController.createPromotion);
 
