@@ -12,10 +12,11 @@ router.delete('/:eventId', authRequired, eventsController.deleteEvent);
 router.post('/:eventId/organizers', authRequired, eventsController.addOrganizer);
 router.delete('/:eventId/organizers/:userId', authRequired, eventsController.removeOrganizer);
 
-router.post('/:eventId/guests', authRequired, eventsController.addGuest);
-router.delete('/:eventId/guests/:userId', authRequired, eventsController.removeGuest);
 router.post('/:eventId/guests/me', authRequired, eventsController.addGuestSelf);
 router.delete('/:eventId/guests/me', authRequired, eventsController.removeGuestSelf);
+router.post('/:eventId/guests', authRequired, eventsController.addGuest);
+router.delete('/:eventId/guests/:userId', authRequired, eventsController.removeGuest);
+
 
 router.post('/:eventId/transactions', authRequired, eventsController.awardPoints);
 
