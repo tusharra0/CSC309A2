@@ -321,90 +321,115 @@ const updateEvent = async ({ eventId, user, body }) => {
     throw createError(403, 'Permission denied.');
   }
 
-  const isManager = hasRole(user, 'manager', 'superuser');
+    const isManager = hasRole(user, 'manager', 'superuser');
+    if (!isManager && body.points !== undefined && body.points !== null) {
+      throw createError(403, 'Permission denied.');
+    }
 
-  if (!isManager && body.points !== undefined && body.points !== null) {
-    throw createError(403, 'Permission denied.');
-  }
-
-  if (!isManager && body.published !== undefined && body.published !== null) {
+    if (!isManager && body.published !== undefined && body.published !== null) {
     throw createError(403, 'Permission denied.');
   }
 
   const data = {};
+  if (body.name) data.name = body.name;
+  if (body.description) data.description = body.description;
+  if (body.location) data.location = body.location;
 
-  if (body.name !== undefined && body.name !== null) {
-    data.name = body.name;
+  if (body.startTime) {
+    const nextStart = isoDate(body.startTime);
+    if (eventHasStarted(event)) {
+      throw createError(400, 'Invalid event time.');
+    }
+    validateEventTimes(nextStart, event.endTime);
+    data.startTime = nextStart;
   }
 
-  if (body.description !== undefined && body.description !== null) {
-    data.description = body.description;
+  if (body.endTime) {
+    const nextEnd = isoDate(body.endTime);
+    validateEventTimes(event.startTime, nextEnd);
+    data.endTime = nextEnd;
   }
 
-  if (body.location !== undefined && body.location !== null) {
-    data.location = body.location;
-  }
-
-  let newStartTime = event.startTime;
-  let newEndTime = event.endTime;
+  let newStart = event.startTime;
+  let newEnd = event.endTime;
 
   if (body.startTime !== undefined && body.startTime !== null) {
-    newStartTime = isoDate(body.startTime);
-    data.startTime = newStartTime;
+    newStart = isoDate(body.startTime);
+    data.startTime = newStart;
   }
 
   if (body.endTime !== undefined && body.endTime !== null) {
-    newEndTime = isoDate(body.endTime);
-    data.endTime = newEndTime;
+    newEnd = isoDate(body.endTime);
+    data.endTime = newEnd;
   }
 
   if (body.startTime !== undefined || body.endTime !== undefined) {
-    validateEventTimes(newStartTime, newEndTime);
-  }
-
-  if (body.capacity !== undefined && body.capacity !== null) {
-    data.capacity = validatePositiveInt(body.capacity, 'Invalid event capacity.');
-  }
-
-  if (isManager && body.points !== undefined && body.points !== null) {
-    const points = validatePositiveInt(body.points, 'Invalid event points.');
-    data.pointsTotal = points;
-  }
-
-  if (isManager && body.published !== undefined && body.published !== null) {
-    if (typeof body.published !== 'boolean') {
-      throw createError(400, 'Invalid published flag.');
+    if (newStart < new Date()) {
+      throw createError(400, 'Invalid event start time.');
     }
-    data.published = body.published;
+    if (newEnd <= newStart) {
+      throw createError(400, 'Invalid event end time.');
+    }
+  }
+
+
+  if (body.capacity !== null && body.capacity !== undefined) {
+    const nextCapacity = validatePositiveInt(body.capacity, 'Invalid event capacity.');
+    if (event.guestLinks.length > nextCapacity) {
+      throw createError(400, 'Invalid event capacity.');
+    }
+    data.capacity = nextCapacity;
+  }
+
+  if (body.points !== null && body.points !== undefined) {
+    const nextPoints = validatePositiveInt(body.points, 'Invalid event points.');
+    if (nextPoints < event.pointsAwarded) {
+      throw createError(400, 'Invalid event points.');
+    }
+    data.pointsTotal = nextPoints;
+    data.pointsRemain = nextPoints - event.pointsAwarded;
+  }
+
+  if (body.published !== null && body.published !== undefined) {
+    data.published = Boolean(body.published);
   }
 
   if (Object.keys(data).length === 0) {
-    throw createError(400, 'No update fields provided');
+    return {
+      id: event.id,
+      name: event.name,
+      location: event.location
+    };
   }
 
   const updated = await prisma.event.update({
-    where: { id: eventId },
-    data,
-    include: {
-      organizers: { include: { user: true } },
-      guests: { include: { user: true } }
-    }
+    where: { id: event.id },
+    data
   });
 
-  return {
+  const response = {
     id: updated.id,
     name: updated.name,
-    description: updated.description,
-    location: updated.location,
-    startTime: updated.startTime.toISOString(),
-    endTime: updated.endTime.toISOString(),
-    capacity: updated.capacity,
-    pointsRemain: updated.pointsRemain,
-    pointsAwarded: updated.pointsAwarded,
-    published: updated.published,
-    organizers: mapOrganizers(updated),
-    guests: []
+    location: updated.location
   };
+
+  if ('published' in data) {
+    response.published = updated.published;
+  }
+  if ('capacity' in data) {
+    response.capacity = updated.capacity;
+  }
+  if ('pointsTotal' in data) {
+    response.pointsRemain = updated.pointsRemain;
+  }
+  if ('startTime' in data) {
+    response.startTime = updated.startTime.toISOString();
+  }
+  if ('endTime' in data) {
+    response.endTime = updated.endTime.toISOString();
+  }
+
+  return response;
 };
 
 const deleteEvent = async ({ eventId, user }) => {
