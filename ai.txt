@@ -1,0 +1,19 @@
+CSC309 Assignment 2  AI Usage Report  
+Date: Nov 9, 2025  
+
+We used ChatGPT (GPT 5) and GitHub Copilot for limited guidance.
+
+AI assistance was used in the following areas:
+- Figuring out the project structure: https://chatgpt.com/share/6910b740-cff4-800b-b836-5d20c355e981
+- authController.js: password strength regex and validation helper pattern: https://chatgpt.com/share/6910b911-f318-800b-aa95-538dd26c72c6
+- userController.js: filtering allowed fields for PATCH routes and returning updated values : https://chatgpt.com/share/6910b9d8-8c94-800b-83f2-7d09e5d0df5e
+- transactionsService.js: example structure for Prisma $transaction logic : https://chatgpt.com/share/6910b9d8-8c94-800b-83f2-7d09e5d0df5e
+- eventsService.js:reference for event-capacity and RSVP checks : https://chatgpt.com/share/6910b9d8-8c94-800b-83f2-7d09e5d0df5e
+- promotionsService.js: example for rejecting simultaneous “started” and “ended” filters: https://chatgpt.com/share/6910ba6b-aa14-800b-a197-382b3c623781
+- schema.prisma: outline for linking User, Transaction, Event, and Promotion models : https://chatgpt.com/share/6910bab3-db7c-800b-a2ac-2f1116bbe249
+- createsu.js: bcrypt hashing and superuser creation example: https://chatgpt.com/share/6910bb10-e758-800b-b309-290c3d75b144
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Sometimes GitHub Copilot Auto was used to complete a few lines of code which there is chat history of 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+

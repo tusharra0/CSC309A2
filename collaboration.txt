@@ -1,0 +1,13 @@
+CSC309 Assignment 2 — Collaboration Report
+Student #1: Tushar Patange Mohan (UTORid: 1010479643)
+Student #2: Domenico Nota (UTORid: )
+
+We collaborated as official teammates for Assignment 2.
+
+Division of work:
+- Tushar: Implemented backend logic for authentication, user management, and Prisma schema setup.
+- Domenico: Worked on transaction, event, and promotion services, including validation and query handling.
+- Both: Discussed and tested API routes together, reviewed each other’s code, and debugged errors using Postman.
+
+All collaboration was limited to our two person team.  
+We did not share or receive any code from other students but we user AI to help. 
