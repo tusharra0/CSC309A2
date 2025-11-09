@@ -13,7 +13,7 @@ const bcrypt = require('bcrypt'); // library for hasing passwords, always store 
 const prisma = new PrismaClient(); // creates a new prsiam client instance so you can use it for queries, opening a connection to your database
 
 async function main() {
-  // Step 1. Parse command-line arguments
+  // Parse command-line arguments
   const args = process.argv.slice(2);
   if (args.length !== 3) {
     console.error("Usage: node prisma/createsu.js <utorid> <email> <password>");
@@ -22,17 +22,17 @@ async function main() {
 
   const [utorid, email, password] = args;
 
-  // Step 2. Check if user already exists
+  // Check if user already exists
   const existingUser = await prisma.user.findUnique({ where: { utorid } });
   if (existingUser) {
-    console.error(`❌ Error: User with utorid "${utorid}" already exists.`);
+    console.error(`Error: User with utorid "${utorid}" already exists.`);
     process.exit(1);
   }
 
-  // Step 3. Hash the password
+  // Hashing the password
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  // Step 4. Create new superuser
+  // Creating a Superuser
   const newUser = await prisma.user.create({
     data: {
       utorid,
@@ -47,7 +47,7 @@ async function main() {
     },
   });
 
-  // Step 5. Print confirmation
+  // Printing Conformation of Creating a Superuser
   console.log("Superuser created successfully!");
   console.log({
     id: newUser.id,

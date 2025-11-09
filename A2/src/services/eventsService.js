@@ -369,7 +369,6 @@ const updateEvent = async ({ eventId, user, body }) => {
 
   const started = eventHasStarted(event);
 
-  // interpret "null" as "no change" like we did for other cases
   const wantsName =
     body.name !== undefined && body.name !== null;
   const wantsDescription =
@@ -385,7 +384,6 @@ const updateEvent = async ({ eventId, user, body }) => {
   const wantsPublished =
     body.published !== undefined && body.published !== null;
 
-  // if event already started, block any of these updates
   if (
     started &&
     (

@@ -8,7 +8,6 @@ const createError = (status, message) => {
   return error;
 };
 
-// case-insensitive, consistent with eventsService
 const isManager = (user) => {
   const role = typeof user?.role === 'string' ? user.role.toLowerCase() : '';
   return role === 'manager' || role === 'superuser';
@@ -16,7 +15,7 @@ const isManager = (user) => {
 
 const ensureManager = (user) => {
   if (!isManager(user)) {
-    // NOTE: keep this typo exactly as tests expect
+    // keep this typo exactly as tests expect
     throw createError(403, 'Insufficient permission to preform this action.');
   }
 };
@@ -92,7 +91,7 @@ const buildActiveWhere = () => {
 };
 
 const createPromotion = async ({ body, user }) => {
-  ensureManager(user); // 👈 Case 99 hinges on this
+  ensureManager(user); // Case 99 hinges on this
 
   if (!body?.name || !body.name.trim()) {
     throw createError(400, 'Name is required.');
