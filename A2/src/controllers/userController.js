@@ -10,7 +10,7 @@ const toDateOnlyString = (value) => {
 };
 
 exports.createUser = async (req, res) => {
-  // Check role permission - only cashier, manager, and superuser can create users
+  // Check role permission  only cashier, manager, and superuser can create users
   const userRole = req.user?.role;
 
   if (!['cashier', 'manager', 'superuser'].includes(userRole)) {
@@ -171,14 +171,12 @@ exports.getUserById = async (req, res) => {
       }
     });
 
-    // Check if user exists
     if (!user) {
       return res.status(404).json({
         message: 'User not found.'
       });
     }
 
-    // Return the user (already filtered by the select clause above)
     return res.status(200).json({
       ...user,
       birthday: toDateOnlyString(user.birthday),
@@ -196,17 +194,14 @@ exports.updateUserById = async (req, res) => {
     const userId = parseInt(req.params.id, 10);
     const updates = req.body || {};
 
-    // Validate userId is a valid number
     if (isNaN(userId)) {
       return res.status(400).json({
         message: 'Invalid user ID'
       });
     }
 
-    // Get the requester's role (already validated by middleware)
     const requesterRole = req.user?.role;
 
-    // Allowed fields for update
     const allowedFields = ['email', 'verified', 'suspicious', 'role'];
     const receivedFields = Object.keys(updates);
     const unknownFields = receivedFields.filter((field) => !allowedFields.includes(field));
@@ -231,7 +226,6 @@ exports.updateUserById = async (req, res) => {
       sanitizedUpdates.email = email;
     }
 
-   // --- FIXED: enforce verified must be true ---
     if (Object.prototype.hasOwnProperty.call(updates, 'verified') && updates.verified !== null) {
       if (typeof updates.verified !== 'boolean' || updates.verified !== true) {
         return res.status(400).json({ message: 'Invalid verified flag.' });
@@ -268,7 +262,6 @@ exports.updateUserById = async (req, res) => {
       });
     }
 
-    // First, fetch the user to check if they exist and get current state
     const existingUser = await prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, utorid: true, name: true, suspicious: true, role: true }
@@ -280,7 +273,6 @@ exports.updateUserById = async (req, res) => {
       });
     }
 
-    // Validate role changes based on requester's role
     if (sanitizedUpdates.role !== undefined) {
       const validRolesForManager = ['regular', 'cashier'];
       const validRolesForSuperuser = ['regular', 'cashier', 'manager', 'superuser'];
@@ -309,18 +301,15 @@ exports.updateUserById = async (req, res) => {
       : existingUser.suspicious;
   const resultingRole = sanitizedUpdates.role ?? existingUser.role;
 
-  // Are we PROMOTING to cashier (non-cashier -> cashier)?
   const isPromotingToCashier =
     existingUser.role !== 'cashier' && resultingRole === 'cashier';
 
-  // Rule: cannot promote a suspicious user to cashier
   if (isPromotingToCashier && resultingSuspicious) {
     return res.status(400).json({
       message: 'Suspicious users cannot be promoted to cashier.'
     });
   }
 
-    // Prepare update data - only include provided fields
     const updateData = {};
     if (sanitizedUpdates.email !== undefined) updateData.email = sanitizedUpdates.email;
     if (sanitizedUpdates.verified !== undefined) updateData.verified = sanitizedUpdates.verified;
@@ -366,7 +355,6 @@ exports.updateUserById = async (req, res) => {
     return res.status(200).json(response);
 
   } catch (err) {
-    // Handle unique constraint violations (e.g., duplicate email)
     if (err.code === 'P2002') {
       return res.status(409).json({
         message: 'Email already exists'
@@ -380,7 +368,6 @@ exports.updateUserById = async (req, res) => {
 
 exports.getMyInfo = async (req, res) => {
   try {
-    // Get the logged-in user's ID from JWT token
     const userId = req.user?.id;
 
     if (!userId) {
@@ -389,7 +376,6 @@ exports.getMyInfo = async (req, res) => {
       });
     }
 
-    // Fetch the user's information
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -428,7 +414,6 @@ exports.getMyInfo = async (req, res) => {
 
 exports.updateMyInfo = async (req, res) => {
   try {
-    // Get the logged-in user's ID from JWT token
     const userId = req.user?.id;
 
     if (!userId) {
@@ -506,7 +491,6 @@ exports.updateMyInfo = async (req, res) => {
 
     const date = new Date(birthday + 'T00:00:00.000Z');
 
-    // Reject if JS auto-fixes it (e.g. 1990-02-30 -> March 2)
     if (
       Number.isNaN(date.getTime()) ||
       date.getUTCFullYear() !== year ||
@@ -521,7 +505,6 @@ exports.updateMyInfo = async (req, res) => {
       return res.status(400).json({ message: 'Invalid birthday' });
     }
 
-  // Store as Date; your response already formats via toDateOnlyString(...)
   updateData.birthday = date;
 }
 
@@ -532,12 +515,10 @@ exports.updateMyInfo = async (req, res) => {
       });
     }
 
-    // Add avatar URL if file was uploaded
     if (req.file) {
       updateData.avatarUrl = `/uploads/avatars/${req.file.filename}`;
     }
 
-    // Perform the update
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: updateData,
@@ -563,7 +544,6 @@ exports.updateMyInfo = async (req, res) => {
     });
 
   } catch (err) {
-    // Handle unique constraint violations (e.g., duplicate email)
     if (err.code === 'P2002') {
       return res.status(409).json({
         message: 'Email already exists'
@@ -577,7 +557,6 @@ exports.updateMyInfo = async (req, res) => {
 
 exports.updateMyPassword = async (req, res) => {
   try {
-    // Get the logged-in user's ID from JWT token
     const userId = req.user?.id;
 
     if (!userId) {
@@ -588,14 +567,12 @@ exports.updateMyPassword = async (req, res) => {
 
     const { old, new: newPassword } = req.body || {};
 
-    // Validate required fields
     if (!old || !newPassword) {
       return res.status(400).json({
         message: 'Both old and new passwords are required'
       });
     }
 
-    // Fetch the user with password
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -610,14 +587,12 @@ exports.updateMyPassword = async (req, res) => {
       });
     }
 
-    // Check if user has a password (some users like regular students might not)
     if (!user.password) {
       return res.status(400).json({
         message: 'No password set for this account'
       });
     }
 
-    // Verify the old password
     const bcrypt = require('bcrypt');
     const isPasswordValid = await bcrypt.compare(old, user.password);
 
